@@ -1,0 +1,17 @@
+# Secrets — never commit
+.env
+*.env
+!.env.example
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Generated
+backend/output/tuning/
+backend/output/demo-hall/
+backend/output/test-hall/
+.DS_Store
+node_modules/
