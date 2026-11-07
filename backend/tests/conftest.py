@@ -1,6 +1,6 @@
 import pytest
 
-from app import config, geo, scenarios, weather
+from app import config, decide, geo, scenarios, weather
 
 TEST_PLACE = {"lat": 41.88, "lon": -87.63, "place": "Testville, IL", "matched": "1 Test St, Testville, IL"}
 
@@ -16,4 +16,5 @@ def no_external_services(monkeypatch):
         "migration_level": "medium", "migration_estimated": True, "sky_danger": 0.6,
         "source": "Test forecast", "source_url": "https://example.test/forecast", "updated": "2026-11-07T20:00:00+00:00"})
     monkeypatch.setattr(scenarios, "_cache", {})
+    decide._answers.clear()
     monkeypatch.setattr(geo, "geocode", lambda address: TEST_PLACE | {"matched": address})

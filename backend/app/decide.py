@@ -4,8 +4,10 @@ Gemini looks at the photo, window list and tonight's conditions and returns JSON
 If Gemini is missing, slow or returns bad JSON, a rule-based fallback takes over,
 so the demo never breaks. Essential floors (lobby) always stay on.
 """
+import hashlib
 import json
 import logging
+import time
 from typing import Optional
 
 from pydantic import BaseModel, ValidationError
@@ -121,7 +123,7 @@ def _gemini_decision(windows: list[Window], cond: Conditions,
         contents.insert(0, types.Part.from_bytes(data=photo, mime_type="image/jpeg"))
     resp = client.models.generate_content(
         model=config.GEMINI_MODEL, contents=contents,
-        config=types.GenerateContentConfig(response_mime_type="application/json", temperature=0.2),
+        config=types.GenerateContentConfig(response_mime_type="application/json", temperature=0, seed=SEED),
     )
     actions, reason = _parse_answer(resp.text)
     log.info("decision from %s", config.GEMINI_MODEL)
@@ -138,7 +140,7 @@ def bullsai_chat(prompt: str, timeout: float = 15) -> str:
 
     url = f"{config.BULLSAI_BASE_URL}/chat/completions"
     headers = {"Authorization": f"Bearer {config.BULLSAI_API_KEY}"}
-    body = {"model": config.BULLSAI_MODEL, "temperature": 0.2,
+    body = {"model": config.BULLSAI_MODEL, "temperature": 0, "seed": SEED,
             "messages": [{"role": "system", "content": "You reply with JSON only."},
                          {"role": "user", "content": prompt}],
             "response_format": {"type": "json_object"}}
@@ -170,7 +172,32 @@ def _clean(actions: list[Action], windows: list[Window]) -> list[Action]:
     return out
 
 
+# Same building + same window states + same forecast -> same AI answer.
+# The models run with temperature 0 and a fixed seed, and identical questions reuse the
+# earlier answer, so "Run again" shows the same decision. Only real AI answers are kept;
+# the rule-based backup is never cached (so a short Gemini outage isn't locked in).
+SEED = 42
+CACHE_SECONDS = 30 * 60
+_answers: dict[str, tuple[float, list, str, str]] = {}
+
+
+def _question_key(windows: list[Window], cond: Conditions, photo: Optional[bytes]) -> str:
+    wins = sorted((w.id, w.floor, w.col, w.state, round(w.brightness, 2), w.color) for w in windows)
+    sky = (cond.location, cond.migration_level, round(cond.sky_danger, 2), cond.fog, cond.rain,
+           cond.sky_cover // 10, cond.wind_dir, cond.scenario)
+    h = hashlib.sha1(json.dumps([wins, sky]).encode())
+    if photo:
+        h.update(hashlib.sha1(photo).digest())
+    return h.hexdigest()
+
+
 def decide(windows: list[Window], cond: Conditions, photo: Optional[bytes] = None) -> dict:
+    key = _question_key(windows, cond, photo)
+    hit = _answers.get(key)
+    if hit and time.monotonic() - hit[0] < CACHE_SECONDS:
+        log.info("same question as before: reusing the %s decision", hit[3])
+        return _result(windows, cond, hit[1], hit[2], hit[3])
+
     # Try each AI in order; the rule-based fallback always works.
     source = "fallback"
     actions, reason = [], ""
@@ -192,7 +219,12 @@ def decide(windows: list[Window], cond: Conditions, photo: Optional[bytes] = Non
     if source == "fallback":
         actions, reason = fallback_decision(windows, cond)
         actions = _clean(actions, windows)
+    else:
+        _answers[key] = (time.monotonic(), actions, reason, source)
+    return _result(windows, cond, actions, reason, source)
 
+
+def _result(windows: list[Window], cond: Conditions, actions: list[Action], reason: str, source: str) -> dict:
     changes = {a.id: a.state for a in actions}
     before, after = risk.risk_before_after(windows, changes, cond)
     new_windows = risk.score_windows(

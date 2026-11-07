@@ -102,3 +102,29 @@ def test_no_location_means_no_forecast():
     from app import scenarios
     with pytest.raises(scenarios.NoLocation):
         scenarios.current_conditions(None)
+
+
+def test_same_question_same_answer(monkeypatch):
+    """Two runs on the same building and forecast give the identical AI decision."""
+    decide._answers.clear()
+    monkeypatch.setattr(config, "GEMINI_API_KEY", "fake")
+    answers = iter([([decide.Action(id=2, state="off")], "First answer."),
+                    ([decide.Action(id=2, state="off"), decide.Action(id=3, state="dim")], "Different answer.")])
+    calls = []
+    monkeypatch.setattr(decide, "_gemini_decision", lambda *a: calls.append(1) or next(answers))
+    first = decide.decide(three_windows(), FOGGY)
+    second = decide.decide(three_windows(), FOGGY)
+    assert len(calls) == 1
+    assert [a.id for a in second["actions"]] == [a.id for a in first["actions"]] == [2]
+    assert second["reason"] == "First answer." and second["source"] == "gemini"
+    # A different night is a different question.
+    decide.decide(three_windows(), CLEAR)
+    assert len(calls) == 2
+
+
+def test_fallback_is_not_cached(monkeypatch):
+    decide._answers.clear()
+    monkeypatch.setattr(config, "GEMINI_API_KEY", "fake")
+    monkeypatch.setattr(decide, "_gemini_decision", lambda *a: (_ for _ in ()).throw(RuntimeError("503")))
+    assert decide.decide(three_windows(), FOGGY)["source"] == "fallback"
+    assert not decide._answers
