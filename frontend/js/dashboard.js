@@ -124,8 +124,9 @@
 
     $("reason").textContent = d.reason;
     lastReason = d.reason;
-    $("source").innerHTML = d.source === "gemini"
-      ? `<span class="tag" style="color:var(--accent)">decided by Gemini</span>`
+    const names = { gemini: "Gemini", bullsai: "BullsAI (UB)" };
+    $("source").innerHTML = d.source && d.source !== "fallback"
+      ? `<span class="tag" style="color:var(--accent)">decided by ${names[d.source] || d.source}</span>`
       : `<span class="tag">rule-based fallback</span>`;
     const acts = d.actions || [];
     const offs = acts.filter((a) => a.state === "off").length;
