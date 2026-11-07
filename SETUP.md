@@ -12,6 +12,7 @@ cd backend && .venv/bin/python scripts/check_keys.py
 | 1. Team repo (GitHub Classroom) | Both | 5 min | Sharing code |
 | 2. `.env` file | Sheetal | 2 min | All keys |
 | 3. Gemini key | Sheetal | 3 min | AI decisions (fallback works without it) |
+| 3b. BullsAI key | Sheetal | 5 min | Backup AI if Gemini fails (needs UB VPN/campus) |
 | 4. ElevenLabs key | Sakshi | 3 min | Voice alert |
 | 5. Devpost project | Either | 5 min | Submission |
 | 6. Run the backend locally | Sheetal | 2 min | Everything |
@@ -59,11 +60,27 @@ Send the finished file to Sakshi privately (Discord DM, not a public channel). N
 
 If you hit a "quota" or "rate limit" error during the demo, nothing breaks: the backend falls back to the rule-based decision and the response shows `"source": "fallback"`.
 
+## 3b. BullsAI (UB's AI platform — backup when Gemini fails)
+
+Order the backend tries: **Gemini → BullsAI → rule-based fallback**.
+The response's `source` field says which one decided (`gemini`, `bullsai` or `fallback`).
+
+1. Request developer access: buffalo.edu/ubit/services/BullsAI.html → **Request developer access**.
+2. Add to `.env`:
+   ```
+   BULLSAI_API_KEY=sk-...
+   BULLSAI_BASE_URL=https://gateway.bullsai.buffalo.edu/v1
+   BULLSAI_MODEL=openai/gpt-oss-120b
+   ```
+3. BullsAI only answers on the **UB network or UB VPN**. Off VPN (and on the Vultr server) it is skipped
+   automatically and the rule-based fallback takes over — nothing breaks.
+
 ## 4. ElevenLabs key (Sakshi's voice alert)
 
 1. Sign up at **https://elevenlabs.io** (free tier is enough for a demo).
-2. Click your profile (bottom-left) → **API Keys** → **Create API Key**. Give it "Text to Speech" and "Voices: read" access.
-3. Pick a calm voice: **Voices** → open a voice → **⋯ → Copy voice ID**.
+2. Open **https://elevenlabs.io/app/developers/api-keys** (sidebar: **Developers → API Keys**) → **Create API Key**.
+   Give it "Text to Speech" and "Voices: read" access. Copy it now — it's shown only once.
+3. Pick a calm voice: sidebar **Voices** → preview with ▶ → click the voice (or **⋯**) → **Copy voice ID**.
 4. Add both to `.env`:
    ```
    ELEVENLABS_API_KEY=sk_...
@@ -95,12 +112,15 @@ Fresh machine? Create the environment first:
 
 ## 7. Tiger Data (optional — first thing to cut if late)
 
-1. Sign up at **https://www.tigerdata.com** (Start for free).
-2. In Tiger Console, click **New service** → choose **Shared** (the free option) → pick a US-East region → **Create**.
-3. **Save the password / download the config file now** — it's only shown once.
-4. Open the service → **Connect** → copy the **service URL** (looks like
+1. Sign up at **https://console.cloud.tigerdata.com**.
+2. Click **New service** → compute **Shared** (free) → **AWS** tab, **US East (N. Virginia)** → **Continue** →
+   **Development** → **Continue** → name it `lights-out-ai` → **Create service**.
+3. Under **Download your database config**, click **Download the config** — the only time the password is shown.
+   (Lost it? Service page → **Forgot your password?**)
+4. In the downloaded `...-credentials.txt`, copy the **Service URL** (looks like
    `postgres://tsdbadmin:PASSWORD@abc123.xyz.tsdb.cloud.timescale.com:34567/tsdb?sslmode=require`).
-5. Put it in `.env` as `DATABASE_URL=...`
+   If the password isn't in it, insert it after `tsdbadmin:`; make sure it ends with `?sslmode=require`.
+5. Put it in `.env` as `DATABASE_URL=...` (one line, no quotes). Wait until the service shows **Ready**.
 6. `scripts/check_keys.py` → `PASS Tiger Data`. The table `window_events` is created automatically.
 7. See logged rows at **http://localhost:8000/api/log** (or in the console's SQL editor:
    `SELECT * FROM window_events ORDER BY time DESC LIMIT 20;`).

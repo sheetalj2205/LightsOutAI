@@ -69,3 +69,28 @@ def test_bad_gemini_falls_back(monkeypatch):
     monkeypatch.setattr(decide, "_gemini_decision", broken)
     out = decide.decide(three_windows(), FOGGY)
     assert out["source"] == "fallback"
+
+
+def test_bullsai_used_when_gemini_fails(monkeypatch):
+    monkeypatch.setattr(config, "GEMINI_API_KEY", "fake")
+    monkeypatch.setattr(config, "BULLSAI_API_KEY", "k")
+    monkeypatch.setattr(config, "BULLSAI_BASE_URL", "http://x/v1")
+    monkeypatch.setattr(config, "BULLSAI_MODEL", "m")
+    def gemini_down(*a, **k):
+        raise RuntimeError("503 UNAVAILABLE")
+    monkeypatch.setattr(decide, "_gemini_decision", gemini_down)
+    # BullsAI answers with JSON wrapped in a code fence; lobby (id 1) must be ignored.
+    monkeypatch.setattr(decide, "bullsai_chat", lambda prompt: '```json\n{"actions": [{"id": 2, "state": "off"},'
+                        ' {"id": 1, "state": "off"}], "reason": "Fog tonight."}\n```')
+    out = decide.decide(three_windows(), FOGGY)
+    assert out["source"] == "bullsai"
+    assert [a.id for a in out["actions"]] == [2]
+
+
+def test_weather_is_cached(monkeypatch):
+    from app import scenarios, weather
+    calls = []
+    monkeypatch.setattr(weather, "get_conditions", lambda: calls.append(1) or {"summary": "Clear", "sky_danger": 0.1})
+    for _ in range(5):
+        scenarios.current_conditions()
+    assert len(calls) == 1

@@ -91,7 +91,8 @@ def _get_building(name: Optional[str]) -> Building:
 
 @app.get("/api/health")
 def health():
-    return {"ok": True, "gemini": bool(config.GEMINI_API_KEY), "tiger_data": db.enabled(),
+    return {"ok": True, "gemini": bool(config.GEMINI_API_KEY), "bullsai": decider.bullsai_ready(),
+            "tiger_data": db.enabled(),
             "twin_pages": len(hub.clients), "scenario": scenarios.active_scenario(),
             "current_building": state.current}
 
@@ -158,6 +159,7 @@ async def decide(req: DecideRequest):
     if req.windows:
         b.windows = req.windows
     cond = scenarios.current_conditions()
+    risk_now = {w.id: w.risk for w in risk.score_windows(b.windows, cond)}  # risk before the change
     result = await asyncio.to_thread(decider.decide, b.windows, cond, b.photo)
     b.windows = result["windows"]
 
@@ -171,7 +173,7 @@ async def decide(req: DecideRequest):
     by_id = {w.id: w for w in b.windows}
     actions = sorted(result["actions"], key=lambda a: (-by_id[a.id].floor, by_id[a.id].col))
     asyncio.create_task(asyncio.to_thread(
-        db.log_rows, b.name, [(a.id, by_id[a.id].risk, a.state) for a in actions], "decision"))
+        db.log_rows, b.name, [(a.id, risk_now.get(a.id, 0.0), a.state) for a in actions], "decision"))
 
     payload = {
         "building": b.name, "actions": [a.model_dump() for a in actions],
@@ -246,9 +248,10 @@ async def ws_endpoint(ws: WebSocket):
                 wid, st = int(msg["id"]), msg.get("state")
                 hub.confirmed[wid] = st
                 b = state.buildings.get(state.current)
-                w = next((x for x in b.windows if x.id == wid), None) if b else None
+                scored = risk.score_windows(b.original, scenarios.current_conditions()) if b else []
+                r = next((x.risk for x in scored if x.id == wid), 0.0)
                 asyncio.create_task(asyncio.to_thread(
-                    db.log_rows, state.current, [(wid, w.risk if w else 0.0, st)], "confirmed"))
+                    db.log_rows, state.current, [(wid, r, st)], "confirmed"))
     except WebSocketDisconnect:
         pass
     finally:

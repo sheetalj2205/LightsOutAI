@@ -14,6 +14,11 @@ load_dotenv(REPO_ROOT / ".env")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.8-flash")
 DATABASE_URL = os.getenv("DATABASE_URL", "")
+
+# BullsAI Model Hub (UB-hosted models, OpenAI-compatible API). Used when Gemini fails.
+BULLSAI_API_KEY = os.getenv("BULLSAI_API_KEY", "")
+BULLSAI_BASE_URL = os.getenv("BULLSAI_BASE_URL", "").rstrip("/")
+BULLSAI_MODEL = os.getenv("BULLSAI_MODEL", "")
 CORS_ORIGINS = [o.strip() for o in os.getenv("CORS_ORIGINS", "*").split(",") if o.strip()]
 DETECT_THRESHOLD = int(os.getenv("DETECT_THRESHOLD", "200"))
 
