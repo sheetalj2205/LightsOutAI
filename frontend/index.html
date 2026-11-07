@@ -21,6 +21,7 @@
       </div>
     </div>
     <div class="topbar-right">
+      <button type="button" class="btn add-btn" id="addBtn">＋ Add building</button>
       <label class="building-pick">
         <span class="sr">Building</span>
         <select id="buildingSelect"></select>
@@ -68,7 +69,7 @@
     <aside class="card step-card" aria-live="polite">
       <!-- Step 1 -->
       <div class="pane" data-step="1">
-        <div class="eyebrow">Step 1 · Tonight's sky</div>
+        <div class="eyebrow" id="skyEyebrow">Step 1 · Tonight's sky</div>
         <h2 id="condSummary">Loading tonight's weather…</h2>
         <p class="explain">Birds migrate at night. Fog and low clouds push them lower, where lit windows pull them in.</p>
         <div class="tiles">
@@ -153,10 +154,56 @@
       <img id="imgBefore" alt="Night photo of the building as taken" />
       <div class="after-clip" id="afterClip"><img id="imgAfter" alt="Same photo with the chosen windows darkened" /></div>
       <div class="handle" id="handle"><span>⟷</span></div>
-      <span class="tag left">Before</span><span class="tag right" id="afterTag">After the AI acts</span>
+      <span class="tag left" id="beforeTag">Before</span><span class="tag right" id="afterTag">After the AI acts</span>
       <input type="range" id="slider" min="0" max="100" value="50" aria-label="Before and after" />
     </div>
   </section>
+
+  <dialog id="addDialog" class="sheet" aria-labelledby="addTitle">
+    <form id="addForm" method="dialog" class="sheet-body">
+      <div class="sheet-head">
+        <div>
+          <h2 id="addTitle">Add a building</h2>
+          <p class="explain">Any photo, day or night. We'll count its floors, read tonight's sky there and build it in 3D.</p>
+        </div>
+        <button type="button" class="close" id="addClose" aria-label="Close">✕</button>
+      </div>
+
+      <div class="add-fields" id="addFields">
+        <label class="drop" id="drop">
+          <input type="file" id="addPhoto" accept="image/jpeg,image/png,image/webp" />
+          <img id="addPreview" alt="" hidden />
+          <span class="drop-hint" id="dropHint"><b>🏢</b><span>Drop a building photo here<br /><small>or click to choose · JPG or PNG</small></span></span>
+        </label>
+        <div class="field-col">
+          <label class="field"><span>Building name</span>
+            <input id="addName" type="text" maxlength="60" placeholder="e.g. Davis Hall" required /></label>
+          <label class="field"><span>Address</span>
+            <input id="addAddress" type="text" maxlength="160" placeholder="e.g. 12 Capen Hall, Buffalo, NY" /></label>
+          <p class="hint">We use the address for that place's real weather tonight.</p>
+          <details class="manual" id="addManual">
+            <summary>Floors and windows (optional)</summary>
+            <div class="manual-row">
+              <label class="field"><span>Floors</span><input id="addFloors" type="number" min="1" max="60" placeholder="auto" /></label>
+              <label class="field"><span>Windows per floor</span><input id="addCols" type="number" min="1" max="40" placeholder="auto" /></label>
+            </div>
+          </details>
+          <p class="form-error" id="addError" hidden></p>
+          <div class="sheet-actions">
+            <button type="button" class="btn ghost" id="addCancel">Cancel</button>
+            <button type="submit" class="btn primary" id="addSubmit">Build it ✨</button>
+          </div>
+        </div>
+      </div>
+
+      <ol class="progress" id="addProgress" hidden>
+        <li><i></i><span>📍 Finding the address</span></li>
+        <li><i></i><span>🌙 Reading tonight's sky there</span></li>
+        <li><i></i><span>🪟 Counting floors and windows</span></li>
+        <li><i></i><span>🏗️ Building it in 3D</span></li>
+      </ol>
+    </form>
+  </dialog>
 
   <div class="toast" id="toast" role="status"></div>
 

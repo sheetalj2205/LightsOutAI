@@ -24,10 +24,10 @@ HEADERS = {"User-Agent": "LightsOutAI-UBHacking (student project)",
 RAIN_WORDS = ("rain", "drizzle", "showers", "snow", "storm", "sleet")
  
  
-def _fallback() -> dict:
+def _fallback(place: str = "Buffalo, NY") -> dict:
     return {
         "time": datetime.now().isoformat(timespec="minutes"),
-        "location": "Buffalo, NY",
+        "location": place,
         "summary": "Weather unavailable, using default night (fallback)",
         "sky_cover": 50,
         "fog": False,
@@ -128,20 +128,96 @@ def _level(score: float) -> str:
     return "low"
  
  
-def get_conditions() -> dict:
+COMPASS = ["N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE", "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW"]
+
+
+def _wmo_summary(code: int, cover: float) -> str:
+    if code in (45, 48):
+        return "Fog"
+    if code >= 95:
+        return "Thunderstorms"
+    if 71 <= code <= 77 or code in (85, 86):
+        return "Snow"
+    if 51 <= code <= 67 or 80 <= code <= 82:
+        return "Rain showers" if code >= 80 else "Rain"
+    if cover >= 85:
+        return "Overcast"
+    if cover >= 60:
+        return "Mostly cloudy"
+    if cover >= 25:
+        return "Partly cloudy"
+    return "Clear"
+
+
+def _open_meteo(lat: float, lon: float, place: str) -> dict:
+    """Same output as the NWS path, from Open-Meteo (works worldwide, no key)."""
     try:
-        point = _get(f"https://api.weather.gov/points/{LAT},{LON}")["properties"]
+        q = (f"https://api.open-meteo.com/v1/forecast?latitude={lat:.4f}&longitude={lon:.4f}"
+             "&hourly=cloud_cover,weather_code,wind_speed_10m,wind_direction_10m,is_day"
+             "&wind_speed_unit=mph&forecast_days=2&timezone=UTC")
+        data = _get(q)["hourly"]
+    except Exception:
+        return _fallback(place)
+    now = datetime.now(timezone.utc).replace(minute=0, second=0, microsecond=0)
+    hours = []
+    for i, t in enumerate(data["time"]):
+        start = datetime.fromisoformat(t).replace(tzinfo=timezone.utc)
+        if data["is_day"][i] or start < now:
+            continue
+        cover = data["cloud_cover"][i] or 0
+        summary = _wmo_summary(data["weather_code"][i] or 0, cover)
+        rain = any(w in summary.lower() for w in RAIN_WORDS)
+        mph = int(round(data["wind_speed_10m"][i] or 0))
+        wind_dir = COMPASS[int(((data["wind_direction_10m"][i] or 0) + 11.25) // 22.5) % 16]
+        hours.append({
+            "summary": summary, "sky_cover": int(cover), "fog": summary == "Fog", "rain": rain,
+            "wind_dir": wind_dir, "wind_speed_mph": mph,
+            "migration": _migration_score(start.month, wind_dir, mph, rain),
+            "danger": _sky_danger(summary, int(cover)),
+        })
+        if len(hours) >= 12:
+            break
+    if not hours:
+        return _fallback(place)
+    return _summarize(hours, place)
+
+
+def _summarize(hours: list, place: str) -> dict:
+    """Riskiest hour of the night for the summary; migration is the night's average."""
+    # Show the riskiest hour of the night; migration is the night's average
+    worst = max(hours, key=lambda h: h["migration"] * h["danger"])
+    migration = sum(h["migration"] for h in hours) / len(hours)
+ 
+    return {
+        "time": datetime.now().isoformat(timespec="minutes"),
+        "location": place,
+        "summary": f"{worst['summary']}, {worst['wind_dir']} wind {worst['wind_speed_mph']} mph",
+        "sky_cover": worst["sky_cover"],
+        "fog": worst["fog"],
+        "rain": worst["rain"],
+        "wind_dir": worst["wind_dir"],
+        "wind_speed_mph": worst["wind_speed_mph"],
+        "migration_level": _level(migration),
+        "migration_estimated": True,
+        "sky_danger": max(h["danger"] for h in hours),
+    }
+
+
+def get_conditions(lat: float = LAT, lon: float = LON, place: str = "Buffalo, NY") -> dict:
+    """Tonight's conditions at any US location (Buffalo by default)."""
+    try:
+        point = _get(f"https://api.weather.gov/points/{lat:.4f},{lon:.4f}")["properties"]
         periods = _get(point["forecastHourly"])["properties"]["periods"]
         cover_map = _sky_cover_map(point["forecastGridData"])
     except Exception:
-        return _fallback()
- 
+        return _open_meteo(lat, lon, place)  # outside the US, or NWS is down
+
     now = datetime.now(timezone.utc)
     # Tonight = the next night-time hours (up to 12)
     night = [p for p in periods
              if not p["isDaytime"] and datetime.fromisoformat(p["endTime"]) > now][:12]
     if not night:
-        return _fallback()
+        return _fallback(place)
  
     hours = []
     for p in night:
@@ -161,25 +237,9 @@ def get_conditions() -> dict:
             "danger": _sky_danger(summary, cover),
         })
  
-    # Show the riskiest hour of the night; migration is the night's average
-    worst = max(hours, key=lambda h: h["migration"] * h["danger"])
-    migration = sum(h["migration"] for h in hours) / len(hours)
- 
-    return {
-        "time": datetime.now().isoformat(timespec="minutes"),
-        "location": "Buffalo, NY",
-        "summary": f"{worst['summary']}, {worst['wind_dir']} wind {worst['wind_speed_mph']} mph",
-        "sky_cover": worst["sky_cover"],
-        "fog": worst["fog"],
-        "rain": worst["rain"],
-        "wind_dir": worst["wind_dir"],
-        "wind_speed_mph": worst["wind_speed_mph"],
-        "migration_level": _level(migration),
-        "migration_estimated": True,
-        "sky_danger": max(h["danger"] for h in hours),
-    }
- 
- 
+    return _summarize(hours, place)
+
+
 if __name__ == "__main__":
     print(json.dumps(get_conditions(), indent=2))
  

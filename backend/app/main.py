@@ -17,7 +17,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 from fastapi.staticfiles import StaticFiles
 
-from . import config, db, decide as decider, detection, risk, scenarios, voice
+from . import config, db, decide as decider, detection, facade, geo, risk, scenarios, voice
 from .demo import make_demo_photo
 from .led import LedView
 from .models import AlertRequest, DecideRequest, SimulateRequest
@@ -33,15 +33,47 @@ def _slug(name: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-") or "building"
 
 
-def _analyze(name: str, photo: bytes, threshold: int, corners=None, floors=None, cols=None) -> Building:
+class NeedGrid(Exception):
+    """Could not find the windows and the AI could not read the facade: ask for floors/cols."""
+
+
+def _cond(b: Optional[Building] = None):
+    """Tonight's conditions at the given (default: current) building's location."""
+    if b is None:
+        b = state.buildings.get(state.current)
+    return scenarios.current_conditions(b.location if b else None)
+
+
+def _analyze(name: str, photo: bytes, threshold: int, corners=None, floors=None, cols=None,
+             location: Optional[dict] = None) -> Building:
     img = detection.load_image(photo)
+    lights = "detected"
     if corners:
         windows = detection.detect_grid(img, corners, floors, cols)
         method = "grid"
     else:
-        windows = detection.detect_windows(img, threshold)
+        day = facade.is_daylight(img)
+        windows = [] if day else detection.detect_windows(img, threshold)
         method = "detect"
-    windows = risk.score_windows(windows, scenarios.current_conditions())
+        if len(windows) < 6:
+            # Day photo, or too few lit windows: read the facade with AI (or use the given grid).
+            info = None
+            try:
+                info = facade.read_facade(photo)
+            except Exception as exc:
+                log.warning("facade reading failed: %s", str(exc)[:200])
+            f = (info or {}).get("floors") or floors
+            c = (info or {}).get("cols") or cols
+            if not (f and c):
+                raise NeedGrid("Couldn't count the floors in this photo. Please enter floors and windows per floor.")
+            pts = None
+            if info and info.get("corners"):
+                h, w = img.shape[:2]
+                pts = [[x * w, y * h] for x, y in info["corners"]]
+            windows = facade.simulate_windows(img, f, c, pts, seed=name)
+            lights = "simulated"
+            method = "ai-facade" if info else "manual"
+    windows = risk.score_windows(windows, scenarios.current_conditions(location))
 
     folder = config.OUTPUT_DIR / _slug(name)
     folder.mkdir(parents=True, exist_ok=True)
@@ -50,7 +82,7 @@ def _analyze(name: str, photo: bytes, threshold: int, corners=None, floors=None,
     base = f"/output/{_slug(name)}"
     b = Building(name=name, windows=windows, photo=photo, image_size=(img.shape[1], img.shape[0]),
                  photo_url=f"{base}/photo.jpg", debug_url=f"{base}/debug.jpg", method=method,
-                 original=[w.model_copy() for w in windows])
+                 original=[w.model_copy() for w in windows], location=location, lights=lights)
     state.buildings[name] = b
     state.current = name
     return b
@@ -103,7 +135,7 @@ def health():
 @app.get("/api/conditions")
 def conditions():
     """Tonight's weather, migration level (low/medium/high, estimated) and sky danger."""
-    return scenarios.current_conditions()
+    return _cond()
 
 
 @app.get("/api/buildings")
@@ -117,7 +149,7 @@ def buildings():
 def windows(building: Optional[str] = None):
     """Current window list of a building (default: the current one), for the twin page."""
     b = _get_building(building)
-    cond = scenarios.current_conditions()
+    cond = _cond(b)
     return b.summary() | {"risk": risk.building_risk(b.windows, cond)}
 
 
@@ -132,12 +164,20 @@ async def select_building(building: str = Form(...)):
 
 @app.post("/api/analyze")
 async def analyze(photo: UploadFile = File(...), building: str = Form("Building"),
+                  address: Optional[str] = Form(None, description="Street address; its weather is used"),
                   threshold: int = Form(config.DETECT_THRESHOLD),
                   corners: Optional[str] = Form(None, description='Grid fallback: [[x,y] x4] TL,TR,BR,BL'),
                   floors: Optional[int] = Form(None), cols: Optional[int] = Form(None)):
-    """Upload a night photo. Returns every detected window with position, brightness, color and risk.
+    """Upload a building photo (night or day) and its address. Night photo: lit windows are detected.
+    Day photo: the AI counts floors and windows and a typical night is simulated.
     Pass corners + floors + cols to use the grid fallback instead of automatic detection."""
     data = await photo.read()
+    building = (building or "Building").strip()[:80] or "Building"
+    location = None
+    if address and address.strip():
+        hit = await asyncio.to_thread(geo.geocode, address)
+        location = ({"address": address.strip(), "found": True} | hit) if hit else \
+            {"address": address.strip(), "found": False, **scenarios.BUFFALO}
     pts = None
     if corners:
         try:
@@ -147,11 +187,13 @@ async def analyze(photo: UploadFile = File(...), building: str = Form("Building"
         if not floors or not cols:
             raise HTTPException(400, "Grid fallback needs floors and cols too")
     try:
-        b = await asyncio.to_thread(_analyze, building, data, threshold, pts, floors, cols)
+        b = await asyncio.to_thread(_analyze, building, data, threshold, pts, floors, cols, location)
+    except NeedGrid as exc:
+        raise HTTPException(422, str(exc))
     except ValueError as exc:
-        raise HTTPException(400, str(exc))
+        raise HTTPException(400, f"{exc}. Please use a JPG or PNG photo.")
     await hub.broadcast({"type": "building"} | b.summary())
-    cond = scenarios.current_conditions()
+    cond = _cond(b)
     return b.summary() | {"risk": risk.building_risk(b.windows, cond), "conditions": cond.model_dump()}
 
 
@@ -161,7 +203,7 @@ async def decide(req: DecideRequest):
     b = _get_building(req.building)
     if req.windows:
         b.windows = req.windows
-    cond = scenarios.current_conditions()
+    cond = _cond()
     risk_now = {w.id: w.risk for w in risk.score_windows(b.windows, cond)}  # risk before the change
     result = await asyncio.to_thread(decider.decide, b.windows, cond, b.photo)
     b.windows = result["windows"]
@@ -208,7 +250,7 @@ async def reset(building: Optional[str] = Form(None)):
 async def simulate(req: SimulateRequest):
     """Switch the scenario: clear, foggy_migration, or live (real weather)."""
     scenarios.set_scenario(req.scenario)
-    cond = scenarios.current_conditions()
+    cond = _cond()
     if state.current:
         b = state.building()
         b.windows = risk.score_windows(b.windows, cond)
@@ -267,7 +309,7 @@ async def ws_endpoint(ws: WebSocket):
                 wid, st = int(msg["id"]), msg.get("state")
                 hub.confirmed[wid] = st
                 b = state.buildings.get(state.current)
-                scored = risk.score_windows(b.original, scenarios.current_conditions()) if b else []
+                scored = risk.score_windows(b.original, _cond()) if b else []
                 r = next((x.risk for x in scored if x.id == wid), 0.0)
                 asyncio.create_task(asyncio.to_thread(
                     db.log_rows, state.current, [(wid, r, st)], "confirmed"))

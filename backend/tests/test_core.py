@@ -90,7 +90,7 @@ def test_bullsai_used_when_gemini_fails(monkeypatch):
 def test_weather_is_cached(monkeypatch):
     from app import scenarios, weather
     calls = []
-    monkeypatch.setattr(weather, "get_conditions", lambda: calls.append(1) or {"summary": "Clear", "sky_danger": 0.1})
+    monkeypatch.setattr(weather, "get_conditions", lambda *a, **k: calls.append(1) or {"summary": "Clear", "sky_danger": 0.1})
     for _ in range(5):
         scenarios.current_conditions()
     assert len(calls) == 1

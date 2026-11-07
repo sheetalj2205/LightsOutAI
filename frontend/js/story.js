@@ -1,6 +1,7 @@
 /* Lights Out AI: the 3-step story page.
    Talks to the backend only through Sakshi's window.LO (js/api.js), draws with scene3d.js. */
 import { createScene } from "./scene3d.js";
+import { initAddBuilding } from "./addbuilding.js";
 
 const LO = window.LO;
 const $ = (id) => document.getElementById(id);
@@ -81,13 +82,21 @@ function sameShape(a, b) {
   return a && b && a.building === b.building && a.floors === b.floors && a.cols === b.cols;
 }
 
-function applyBuilding(b) {
+function applyBuilding(b, opts = {}) {
   clearWave();
-  if (sameShape(building, b)) view.setWindows(b.windows);
-  else view.setBuilding(b);
+  if (sameShape(building, b) && !opts.rise) view.setWindows(b.windows);
+  else view.setBuilding(b, opts);
   view.setBirdMode(b.windows.some((w) => w.state === "off") && lastDecision ? "safe" : "attracted");
   building = b;
-  $("buildingName").textContent = b.building;
+  const place = b.location && b.location.place;
+  $("buildingName").innerHTML = "";
+  $("buildingName").append(b.building);
+  if (place) {
+    const where = document.createElement("span");
+    where.className = "where";
+    where.textContent = ` · ${place}`;
+    $("buildingName").append(where);
+  }
   if (typeof b.risk === "number") setRiskNow(b.risk);
   showPhoto();
 }
@@ -118,7 +127,8 @@ function goTo(n) {
 
 // ---------------------------------------------------------------- step 1: conditions
 function showConditions(c) {
-  $("condSummary").textContent = c.summary || "Tonight in Buffalo";
+  $("condSummary").textContent = c.summary || "Tonight's weather";
+  $("skyEyebrow").textContent = c.location ? `Step 1 · Tonight's sky · ${c.location}` : "Step 1 · Tonight's sky";
   const mig = c.migration_level || "medium";
   const badge = $("migBadge");
   badge.textContent = mig.toUpperCase();
@@ -233,6 +243,16 @@ function showPhoto() {
   const sec = $("photoSection");
   if (!building || !building.photo_url) { sec.hidden = true; return; }
   sec.hidden = false;
+  const simulated = building.lights === "simulated";
+  $("compare").classList.toggle("single", simulated);
+  $("debugToggle").closest("label").classList.toggle("hidden", simulated);
+  if (simulated) {
+    // Day photo: show the floors and windows we found; lights tonight are simulated.
+    $("imgBefore").src = bust(building.debug_url || building.photo_url);
+    $("beforeTag").textContent = "Floors and windows found · tonight's lights simulated (day photo)";
+    return;
+  }
+  $("beforeTag").textContent = "Before";
   const before = $("debugToggle").checked && building.debug_url ? building.debug_url : building.photo_url;
   $("imgBefore").src = bust(before);
   if (building.after_url) { $("imgAfter").src = bust(building.after_url); $("afterTag").textContent = "After the AI acts"; }
@@ -305,6 +325,21 @@ async function setFake(on, quiet) {
   catch (e) { toast(`Could not load: ${e.message}`); }
 }
 
+// ---------------------------------------------------------------- new building
+async function buildingAdded(b) {
+  lastDecision = null;
+  applyBuilding(b, { rise: true });
+  view.setBirdMode("attracted");
+  if (b.conditions) showConditions(b.conditions);
+  fillBuildings(await LO.api().buildings().catch(() => null), b.building);
+  goTo(1);
+  const loc = b.location || {};
+  const how = b.lights === "simulated" ? "lights simulated from a day photo" : "lit windows found in the photo";
+  toast(loc.found === false
+    ? `Couldn't find that address, so we're using Buffalo's weather. ${b.floors} floors × ${b.cols} windows.`
+    : `${b.building}: ${b.floors} floors × ${b.cols} windows · ${how}`, 5000);
+}
+
 // ---------------------------------------------------------------- wire up
 function wire() {
   document.querySelectorAll("[data-go]").forEach((b) => b.addEventListener("click", () => goTo(+b.dataset.go)));
@@ -320,11 +355,19 @@ function wire() {
   $("debugToggle").addEventListener("change", showPhoto);
   $("slider").addEventListener("input", (e) => setSlider(e.target.value));
   $("buildingSelect").addEventListener("change", async (e) => {
-    try { const b = await LO.api().select(e.target.value); lastDecision = null; applyBuilding(b); await refreshRisk(); goTo(1); }
+    try {
+      const b = await LO.api().select(e.target.value);
+      lastDecision = null;
+      applyBuilding(b, { rise: true });
+      showConditions(await LO.api().conditions());
+      await refreshRisk();
+      goTo(1);
+    }
     catch (err) { toast(`Could not switch building: ${err.message}`); }
   });
   $("fakeBtn").addEventListener("click", () => { $("fakeBtn").closest("details").open = false; setFake(!LO.fake); });
   $("docsLink").href = LO.url("/docs");
+  initAddBuilding({ toast, onAdded: buildingAdded });
   tickClock();
   setInterval(tickClock, 30000);
   setSlider(50);

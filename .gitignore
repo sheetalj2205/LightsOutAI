@@ -10,8 +10,7 @@ __pycache__/
 .pytest_cache/
 
 # Generated
-backend/output/tuning/
-backend/output/demo-hall/
-backend/output/test-hall/
+# Generated images and uploaded photos (deploy copies them with rsync)
+backend/output/
 .DS_Store
 node_modules/

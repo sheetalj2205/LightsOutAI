@@ -1,6 +1,7 @@
 """Demo presets that override live conditions (Task 7)."""
 import time
 from datetime import datetime
+from typing import Optional
 
 from . import weather
 from .models import Conditions
@@ -22,21 +23,25 @@ PRESETS = {
 
 _active = "live"
 
-# The forecast changes hourly; cache it so the many calls during a demo stay instant.
+# The forecast changes hourly; cache it per location so the many calls during a demo stay instant.
 CACHE_SECONDS = 600
-_cache: tuple[float, dict] = (0.0, {})
+_cache: dict[tuple, tuple[float, dict]] = {}
+
+BUFFALO = {"lat": weather.LAT, "lon": weather.LON, "place": "Buffalo, NY"}
 
 
-def _live_weather() -> dict:
-    global _cache
-    if time.monotonic() - _cache[0] < CACHE_SECONDS:
-        return _cache[1]
+def _live_weather(location: Optional[dict] = None) -> dict:
+    loc = location or BUFFALO
+    key = (round(loc["lat"], 3), round(loc["lon"], 3))
+    hit = _cache.get(key)
+    if hit and time.monotonic() - hit[0] < CACHE_SECONDS:
+        return hit[1]
     try:
-        live = weather.get_conditions()
+        live = weather.get_conditions(loc["lat"], loc["lon"], loc.get("place") or "Buffalo, NY")
     except Exception as exc:  # weather API down -> fall back to a neutral night
-        return {"summary": f"Weather unavailable ({exc.__class__.__name__})"}
+        return {"summary": f"Weather unavailable ({exc.__class__.__name__})", "location": loc.get("place", "")}
     if "fallback" not in live.get("summary", ""):
-        _cache = (time.monotonic(), live)  # don't cache a failed fetch; retry next call
+        _cache[key] = (time.monotonic(), live)  # don't cache a failed fetch; retry next call
     return live
 
 
@@ -51,9 +56,9 @@ def active_scenario() -> str:
     return _active
 
 
-def current_conditions() -> Conditions:
+def current_conditions(location: Optional[dict] = None) -> Conditions:
     """Live conditions from the weather module, unless a demo scenario is active."""
-    live = _live_weather()
+    live = _live_weather(location)
     data = {**live, "time": datetime.now().isoformat(timespec="minutes")}
     if _active != "live":
         data.update(PRESETS[_active])

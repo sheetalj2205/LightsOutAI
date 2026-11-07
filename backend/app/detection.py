@@ -111,10 +111,10 @@ def detect_windows(img: np.ndarray, threshold: int = 200) -> list[Window]:
     return windows
 
 
-def detect_grid(img: np.ndarray, corners: list[list[float]], floors: int, cols: int,
-                lit_threshold: int = 110) -> list[Window]:
-    """Fallback: straighten the facade from 4 corners (top-left, top-right, bottom-right,
-    bottom-left, in image pixels) and check each floors x cols cell for light."""
+def grid_cells(img: np.ndarray, corners: list[list[float]], floors: int, cols: int) -> list[dict]:
+    """Straighten the facade from 4 corners (top-left, top-right, bottom-right, bottom-left, in image
+    pixels) and return every floors x cols cell: floor, col, bounding box in the photo, light level
+    (0-255) and the cell's pixels in the straightened image."""
     if len(corners) != 4:
         raise ValueError("corners must be 4 points: top-left, top-right, bottom-right, bottom-left")
     cell_w, cell_h = 60, 80
@@ -125,29 +125,33 @@ def detect_grid(img: np.ndarray, corners: list[list[float]], floors: int, cols: 
     M_inv = np.linalg.inv(M)
     flat = cv2.warpPerspective(img, M, (W, H))
     gray = cv2.cvtColor(flat, cv2.COLOR_BGR2GRAY)
-
-    windows = []
-    wid = 0
+    cells = []
     for f in range(floors):  # f=0 is the top row in the straightened image
-        floor = floors - f
         for c in range(cols):
             x0, y0 = c * cell_w, f * cell_h
             mx, my = int(cell_w * 0.2), int(cell_h * 0.2)  # ignore frames/mullions
             inner = gray[y0 + my:y0 + cell_h - my, x0 + mx:x0 + cell_w - mx]
-            level = float(inner.mean())
-            cell_px = np.array([[[x0, y0]], [[x0 + cell_w, y0]], [[x0 + cell_w, y0 + cell_h]],
-                                [[x0, y0 + cell_h]]], dtype=np.float32)
-            back = cv2.perspectiveTransform(cell_px, M_inv)
-            bx, by, bw, bh = cv2.boundingRect(back.astype(np.int32))
-            color_px = flat[y0 + my:y0 + cell_h - my, x0 + mx:x0 + cell_w - mx]
-            wid += 1
-            windows.append(Window(
-                id=wid, floor=floor, col=c + 1, x=bx, y=by, w=bw, h=bh,
-                state="on" if level >= lit_threshold else "off",
-                brightness=round(level / 255, 3),
-                color=_main_color(color_px) if level >= lit_threshold else "white",
-            ))
-    # Re-number bottom-to-top, left-to-right to match detect_windows.
+            pts = np.array([[[x0 + mx, y0 + my]], [[x0 + cell_w - mx, y0 + my]],
+                            [[x0 + cell_w - mx, y0 + cell_h - my]], [[x0 + mx, y0 + cell_h - my]]], dtype=np.float32)
+            bx, by, bw, bh = cv2.boundingRect(cv2.perspectiveTransform(pts, M_inv).astype(np.int32))
+            cells.append({"floor": floors - f, "col": c + 1, "x": bx, "y": by, "w": max(bw, 1), "h": max(bh, 1),
+                          "level": float(inner.mean()),
+                          "pixels": flat[y0 + my:y0 + cell_h - my, x0 + mx:x0 + cell_w - mx]})
+    return cells
+
+
+def detect_grid(img: np.ndarray, corners: list[list[float]], floors: int, cols: int,
+                lit_threshold: int = 110) -> list[Window]:
+    """Fallback: straighten the facade from 4 corners and check each floors x cols cell for light."""
+    windows = []
+    for cell in grid_cells(img, corners, floors, cols):
+        lit = cell["level"] >= lit_threshold
+        windows.append(Window(
+            id=0, floor=cell["floor"], col=cell["col"], x=cell["x"], y=cell["y"], w=cell["w"], h=cell["h"],
+            state="on" if lit else "off", brightness=round(cell["level"] / 255, 3),
+            color=_main_color(cell["pixels"]) if lit else "white",
+        ))
+    # Number bottom-to-top, left-to-right to match detect_windows.
     windows.sort(key=lambda w: (w.floor, w.col))
     return [w.model_copy(update={"id": i}) for i, w in enumerate(windows, start=1)]
 

@@ -241,7 +241,9 @@ export function createScene(container) {
     return m;
   }
 
-  function setBuilding({ floors, cols, windows }) {
+  let rise = null; // {start, ms} while a new building grows out of the ground
+
+  function setBuilding({ floors, cols, windows }, opts = {}) {
     floors = Math.max(1, floors || Math.max(1, ...windows.map((w) => w.floor)));
     cols = Math.max(1, cols || Math.max(1, ...windows.map((w) => w.col)));
     if (building) {
@@ -408,6 +410,12 @@ export function createScene(container) {
     scene.add(building);
     refreshTargets();
     fitCamera();
+    if (opts.rise) {
+      building.scale.y = 0.001;
+      rise = { start: performance.now(), ms: 1800 };
+    } else {
+      rise = null;
+    }
   }
 
   function setWindow(id, state) {
@@ -534,6 +542,14 @@ export function createScene(container) {
       if (p >= 1) { camTween = null; controls.enabled = true; }
     } else {
       controls.update();
+    }
+
+    // New building grows out of the ground with a little overshoot.
+    if (rise && building) {
+      const p = Math.min((performance.now() - rise.start) / rise.ms, 1);
+      const c1 = 1.4, c3 = c1 + 1;
+      building.scale.y = Math.max(0.001, 1 + c3 * Math.pow(p - 1, 3) + c1 * Math.pow(p - 1, 2));
+      if (p >= 1) { building.scale.y = 1; rise = null; }
     }
 
     // Window fades.
