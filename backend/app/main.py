@@ -275,3 +275,10 @@ async def ws_endpoint(ws: WebSocket):
         pass
     finally:
         hub.disconnect(ws)
+
+
+# Serve Sakshi's pages at http://localhost:8000/ for local testing (on Vultr, Caddy serves them).
+# Mounted last so every /api, /ws, /output and /docs route above wins.
+FRONTEND_DIR = config.REPO_ROOT / "frontend"
+if FRONTEND_DIR.is_dir():
+    app.mount("/", StaticFiles(directory=FRONTEND_DIR, html=True), name="frontend")
