@@ -86,6 +86,29 @@ def fallback_decision(windows: list[Window], cond: Conditions) -> tuple[list[Act
     return actions, " ".join(parts)
 
 
+def _build_prompt(windows: list[Window], cond: Conditions) -> str:
+    scored = risk.score_windows(windows, cond)
+    win_rows = [{"id": w.id, "floor": w.floor, "col": w.col, "state": w.state,
+                 "brightness": w.brightness, "color": w.color, "risk": w.risk} for w in scored]
+    return PROMPT.format(essential=sorted(config.ESSENTIAL_FLOORS),
+                         conditions=cond.model_dump_json(indent=1),
+                         windows=json.dumps(win_rows))
+
+
+def _parse_answer(text: str) -> tuple[list[Action], str]:
+    """Accept plain JSON, or JSON wrapped in ```json fences / extra text."""
+    text = text.strip()
+    if not text.startswith("{"):
+        start, end = text.find("{"), text.rfind("}")
+        if start < 0 or end <= start:
+            raise ValueError("no JSON object in the answer")
+        text = text[start:end + 1]
+    answer = _GeminiAnswer.model_validate_json(text)
+    if not answer.reason.strip():
+        raise ValueError("empty reason")
+    return answer.actions, answer.reason.strip()
+
+
 def _gemini_decision(windows: list[Window], cond: Conditions,
                      photo: Optional[bytes]) -> tuple[list[Action], str]:
     from google import genai
@@ -93,21 +116,45 @@ def _gemini_decision(windows: list[Window], cond: Conditions,
 
     client = genai.Client(api_key=config.GEMINI_API_KEY,
                           http_options=types.HttpOptions(timeout=20_000))
-    scored = risk.score_windows(windows, cond)
-    win_rows = [{"id": w.id, "floor": w.floor, "col": w.col, "state": w.state,
-                 "brightness": w.brightness, "color": w.color, "risk": w.risk} for w in scored]
-    prompt = PROMPT.format(essential=sorted(config.ESSENTIAL_FLOORS),
-                           conditions=cond.model_dump_json(indent=1),
-                           windows=json.dumps(win_rows))
-    contents: list = [prompt]
+    contents: list = [_build_prompt(windows, cond)]
     if photo:
         contents.insert(0, types.Part.from_bytes(data=photo, mime_type="image/jpeg"))
     resp = client.models.generate_content(
         model=config.GEMINI_MODEL, contents=contents,
         config=types.GenerateContentConfig(response_mime_type="application/json", temperature=0.2),
     )
-    answer = _GeminiAnswer.model_validate_json(resp.text)
-    return answer.actions, answer.reason.strip()
+    actions, reason = _parse_answer(resp.text)
+    log.info("decision from %s", config.GEMINI_MODEL)
+    return actions, reason
+
+
+def bullsai_ready() -> bool:
+    return bool(config.BULLSAI_API_KEY and config.BULLSAI_BASE_URL and config.BULLSAI_MODEL)
+
+
+def bullsai_chat(prompt: str, timeout: float = 25) -> str:
+    """One chat call to the BullsAI Model Hub (OpenAI-compatible /chat/completions)."""
+    import httpx
+
+    url = f"{config.BULLSAI_BASE_URL}/chat/completions"
+    headers = {"Authorization": f"Bearer {config.BULLSAI_API_KEY}"}
+    body = {"model": config.BULLSAI_MODEL, "temperature": 0.2,
+            "messages": [{"role": "system", "content": "You reply with JSON only."},
+                         {"role": "user", "content": prompt}],
+            "response_format": {"type": "json_object"}}
+    r = httpx.post(url, headers=headers, json=body, timeout=timeout)
+    if r.status_code == 400:  # some servers don't support response_format; retry without it
+        body.pop("response_format")
+        r = httpx.post(url, headers=headers, json=body, timeout=timeout)
+    r.raise_for_status()
+    return r.json()["choices"][0]["message"]["content"] or ""
+
+
+def _bullsai_decision(windows: list[Window], cond: Conditions) -> tuple[list[Action], str]:
+    # Text only: the window list already carries what the photo shows (position, brightness, color).
+    actions, reason = _parse_answer(bullsai_chat(_build_prompt(windows, cond)))
+    log.info("decision from BullsAI (%s)", config.BULLSAI_MODEL)
+    return actions, reason
 
 
 def _clean(actions: list[Action], windows: list[Window]) -> list[Action]:
@@ -124,17 +171,24 @@ def _clean(actions: list[Action], windows: list[Window]) -> list[Action]:
 
 
 def decide(windows: list[Window], cond: Conditions, photo: Optional[bytes] = None) -> dict:
+    # Try each AI in order; the rule-based fallback always works.
     source = "fallback"
     actions, reason = [], ""
+    attempts = []
     if config.GEMINI_API_KEY:
+        attempts.append(("gemini", lambda: _gemini_decision(windows, cond, photo)))
+    if bullsai_ready():
+        attempts.append(("bullsai", lambda: _bullsai_decision(windows, cond)))
+    for name, run in attempts:
         try:
-            actions, reason = _gemini_decision(windows, cond, photo)
+            actions, reason = run()
             actions = _clean(actions, windows)
-            source = "gemini"
+            source = name
+            break
         except (ValidationError, ValueError) as exc:
-            log.warning("Gemini returned bad JSON, using fallback: %s", exc)
+            log.warning("%s returned bad JSON, trying next: %s", name, str(exc)[:200])
         except Exception as exc:  # network, quota, timeout...
-            log.warning("Gemini failed, using fallback: %s", exc)
+            log.warning("%s failed, trying next: %s", name, str(exc)[:200])
     if source == "fallback":
         actions, reason = fallback_decision(windows, cond)
         actions = _clean(actions, windows)

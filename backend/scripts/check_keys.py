@@ -21,11 +21,22 @@ if not config.GEMINI_API_KEY:
 else:
     try:
         from google import genai
-        r = genai.Client(api_key=config.GEMINI_API_KEY).models.generate_content(
-            model=config.GEMINI_MODEL, contents="Reply with the single word: ready")
+        client = genai.Client(api_key=config.GEMINI_API_KEY)  # keep a reference or the SDK closes it
+        r = client.models.generate_content(model=config.GEMINI_MODEL, contents="Reply with the single word: ready")
         report("Gemini", True, f"{config.GEMINI_MODEL} says: {r.text.strip()[:40]}")
     except Exception as e:
         report("Gemini", False, str(e)[:160])
+
+# BullsAI (backup AI)
+from app import decide  # noqa: E402
+if not decide.bullsai_ready():
+    report("BullsAI", False, "BULLSAI_API_KEY / BULLSAI_BASE_URL / BULLSAI_MODEL not all set (optional backup)")
+else:
+    try:
+        reply = decide.bullsai_chat('Reply with this JSON exactly: {"status": "ready"}')
+        report("BullsAI", "ready" in reply, f"{config.BULLSAI_MODEL} says: {reply.strip()[:60]}")
+    except Exception as e:
+        report("BullsAI", False, f"{str(e)[:140]}  (off campus? connect to UB VPN)")
 
 # ElevenLabs (Sakshi's voice alert)
 key = os.getenv("ELEVENLABS_API_KEY", "")
@@ -33,9 +44,16 @@ if not key:
     report("ElevenLabs", False, "ELEVENLABS_API_KEY is empty")
 else:
     import httpx
-    r = httpx.get("https://api.elevenlabs.io/v1/voices", headers={"xi-api-key": key}, timeout=10)
-    report("ElevenLabs", r.status_code == 200,
-           f"{len(r.json().get('voices', []))} voices available" if r.status_code == 200 else r.text[:160])
+    voice = os.getenv("ELEVENLABS_VOICE_ID", "")
+    if not voice:
+        report("ElevenLabs", False, "ELEVENLABS_VOICE_ID is empty")
+    else:
+        # Speak one word with the chosen voice: tests the key, the Text to Speech permission and the voice id.
+        r = httpx.post(f"https://api.elevenlabs.io/v1/text-to-speech/{voice}",
+                       headers={"xi-api-key": key}, timeout=20,
+                       json={"text": "Ready.", "model_id": "eleven_flash_v2_5"})
+        good = r.status_code == 200 and r.headers.get("content-type", "").startswith("audio")
+        report("ElevenLabs", good, f"voice works ({len(r.content)} bytes of audio)" if good else r.text[:200])
 
 # Tiger Data
 if not config.DATABASE_URL:

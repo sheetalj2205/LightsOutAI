@@ -61,7 +61,7 @@ class Decision(BaseModel):
     risk_before: float
     risk_after: float
     reason: str
-    source: Literal["gemini", "fallback"]
+    source: Literal["gemini", "bullsai", "fallback"]
     conditions: Conditions
     windows: list[Window]
     energy_saved_kwh: float
