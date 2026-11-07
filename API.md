@@ -57,6 +57,13 @@ Connect to `/ws?device=led&floors=5&cols=6`. The building is mapped onto that gr
 `{"type":"frame","states":"OODF…","colors":[…]}` then `{"led": 7, "state": "off"}`, and replies with `"ok": true`.
 Twin pages are not affected. `GET /api/health` shows `led_boards`. See [hardware/README.md](hardware/README.md).
 
+## Migration estimate
+`migration_level`, `migration_index` (0-1) and `migration_factors` (`[{label, effect: up|down|neutral}]`) come from
+`backend/app/migration.py`: the factors of the BirdCast forecast model (Van Doren & Horton, Science 2018) — season,
+tailwind, 24 h temperature and pressure change, rain — on NOAA GFS weather via Open-Meteo. `birdcast_url` links to
+BirdCast's radar dashboard for comparison. `ebird` (when `EBIRD_API_KEY` is set) lists night-migrant species reported
+within 25 km in the last 3 days (eBird, Cornell Lab of Ornithology).
+
 ## Weather sources
 No location is hardcoded. The forecast always comes from the building's address:
 U.S. National Weather Service (api.weather.gov) for US addresses, Open-Meteo (open-meteo.com) elsewhere.

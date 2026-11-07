@@ -217,6 +217,7 @@ function showConditions(c) {
   }
   src.hidden = !c.source;
 
+  showMigrationWhy(c);
   const mig = c.migration_level || "medium";
   const badge = $("migBadge");
   badge.textContent = mig.toUpperCase();
@@ -228,6 +229,53 @@ function showConditions(c) {
   bar.className = sd >= 65 ? "bad" : sd >= 35 ? "" : "good";
 }
 
+// The factors behind tonight's migration level, its source, and live eBird sightings.
+function showMigrationWhy(c) {
+  const factors = c.migration_factors || [];
+  $("whyBox").hidden = !factors.length;
+  $("whyLevel").textContent = c.migration_level || "";
+  const chips = $("whyChips");
+  chips.innerHTML = "";
+  for (const f of factors) {
+    const el = document.createElement("span");
+    el.className = `chip-why ${f.effect}`;
+    const arrow = document.createElement("i");
+    arrow.textContent = f.effect === "up" ? "↑" : f.effect === "down" ? "↓" : "·";
+    el.append(arrow, f.label);
+    el.title = f.effect === "up" ? "More birds flying" : f.effect === "down" ? "Fewer birds flying" : "Little effect";
+    chips.appendChild(el);
+  }
+  const src = $("migSourceLine");
+  src.innerHTML = "";
+  if (c.migration_source) {
+    src.append(`Estimate: ${c.migration_source}`);
+    if (c.birdcast_url) {
+      const a = document.createElement("a");
+      a.href = c.birdcast_url;
+      a.target = "_blank";
+      a.rel = "noopener";
+      a.textContent = "Compare with BirdCast radar ↗";
+      src.append(" · ", a);
+    }
+  }
+  const e = c.ebird;
+  const line = $("ebirdLine");
+  line.hidden = !e;
+  if (e) {
+    line.innerHTML = '<svg class="ic"><use href="#i-bird"/></svg>';
+    const text = document.createElement("span");
+    const examples = e.examples && e.examples.length ? ` (e.g. ${e.examples.slice(0, 3).join(", ")})` : "";
+    text.append(`${e.migrant_species} night-migrating species reported within ${e.radius_km} km in the last ${e.days} days${examples}. `);
+    const a = document.createElement("a");
+    a.href = e.url;
+    a.target = "_blank";
+    a.rel = "noopener";
+    a.textContent = `${e.source} ↗`;
+    text.append(a);
+    line.appendChild(text);
+  }
+}
+
 function askForLocation(prefill = "") {
   hasForecast = false;
   $("condSummary").textContent = "Where is this building?";
@@ -235,6 +283,8 @@ function askForLocation(prefill = "") {
   $("whereLine").hidden = true;
   $("sourceLine").hidden = true;
   $("condTiles").hidden = true;
+  $("whyBox").hidden = true;
+  $("ebirdLine").hidden = true;
   $("nextBtn").disabled = true;
   $("whereError").hidden = true;
   $("whereInput").value = prefill;

@@ -38,6 +38,14 @@ else:
     except Exception as e:
         report("BullsAI", False, f"{str(e)[:140]}  (off campus? connect to UB VPN)")
 
+# eBird (Cornell Lab)
+from app import ebird  # noqa: E402
+if not config.EBIRD_API_KEY:
+    report("eBird", False, "EBIRD_API_KEY is empty (optional: live bird sightings are hidden)")
+else:
+    e = ebird.recent(42.886, -78.878)
+    report("eBird", e is not None, f"{e['migrant_species']} night-migrant species reported near Buffalo" if e else "request failed")
+
 # ElevenLabs (Sakshi's voice alert)
 key = os.getenv("ELEVENLABS_API_KEY", "")
 if not key:

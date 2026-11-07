@@ -39,6 +39,12 @@ class Conditions(BaseModel):
     source: str = ""        # where the forecast came from, e.g. "U.S. National Weather Service"
     source_url: str = ""    # human-readable forecast page for that location
     updated: str = ""       # when the source last updated the forecast (ISO time)
+    # Migration estimate details (BirdCast method on NOAA GFS) and live eBird evidence
+    migration_index: Optional[float] = None
+    migration_factors: list[dict] = []
+    migration_source: str = ""
+    birdcast_url: str = ""
+    ebird: Optional[dict] = None
 
 
 class Command(BaseModel):

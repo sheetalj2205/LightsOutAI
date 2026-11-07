@@ -197,6 +197,18 @@ select {
 .source-line a:hover { color: var(--accent); }
 .btn.primary:disabled { background: #b9bbe9; border-color: #b9bbe9; box-shadow: none; cursor: not-allowed; }
 
+/* migration "why" + eBird */
+.why { display: flex; flex-direction: column; gap: 8px; border-top: 1px solid var(--line); padding-top: 12px; }
+.why .label b { color: var(--text); text-transform: uppercase; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip-why { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 600; padding: 4px 9px; border-radius: 999px; background: var(--bg); color: var(--muted); }
+.chip-why i { font-style: normal; font-weight: 800; }
+.chip-why.up { background: var(--bad-soft); color: #b42d2d; }
+.chip-why.down { background: var(--good-soft); color: #11804a; }
+.ebird-line { margin: 0; display: flex; gap: 8px; align-items: flex-start; font-size: 13px; background: #f3f8f2; border-radius: 12px; padding: 10px 12px; color: #2b4a2f; }
+.ebird-line .ic { color: #2e8b57; margin-top: 1px; }
+.ebird-line a { color: inherit; font-weight: 700; }
+
 /* switches */
 .switch { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; cursor: pointer; user-select: none; }
 .switch input { display: none; }

@@ -24,6 +24,7 @@
       <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></symbol>
       <symbol id="i-sound" viewBox="0 0 24 24"><path d="M4 9h4l5-4v14l-5-4H4z"/><path d="M16.5 8.5a5 5 0 0 1 0 7M19 6a8.5 8.5 0 0 1 0 12"/></symbol>
       <symbol id="i-redo" viewBox="0 0 24 24"><path d="M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7"/></symbol>
+      <symbol id="i-bird" viewBox="0 0 24 24"><path d="M3 13c3-2.4 5.6-2.4 8 .8 2.4-3.2 5-3.2 8-.8"/><path d="M16 6.5a2 2 0 1 0 0-.01"/></symbol>
       <symbol id="i-building" viewBox="0 0 24 24"><path d="M5 21V4h10v17M15 9h4v12M3 21h18M8 8h1M11 8h1M8 12h1M11 12h1M8 16h1M11 16h1"/></symbol>
     </defs>
   </svg>
@@ -182,6 +183,12 @@
             <div class="bar"><span id="riskNowBar"></span></div>
           </div>
         </div>
+        <div class="why" id="whyBox" hidden>
+          <div class="label">Why migration is <b id="whyLevel">–</b> tonight</div>
+          <div class="chips" id="whyChips"></div>
+          <p class="source-line" id="migSourceLine"></p>
+        </div>
+        <p class="ebird-line" id="ebirdLine" hidden></p>
         <p class="explain small">Birds migrate at night. Fog and low clouds push them lower, where lit windows pull them in.</p>
         <button type="button" class="btn primary wide" data-go="3" id="nextBtn" disabled>Continue<svg class="ic"><use href="#i-arrow"/></svg></button>
       </div>

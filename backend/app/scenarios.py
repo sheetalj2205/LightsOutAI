@@ -1,10 +1,13 @@
 """Demo presets that override live conditions (Task 7)."""
+import logging
 import time
 from datetime import datetime
 from typing import Optional
 
-from . import weather
+from . import ebird, migration, weather
 from .models import Conditions
+
+log = logging.getLogger("lightsout.scenarios")
 
 PRESETS = {
     "clear": {
@@ -40,6 +43,13 @@ def _live_weather(loc: dict) -> dict:
         live = weather.get_conditions(loc["lat"], loc["lon"], loc.get("place") or loc.get("address", ""))
     except Exception as exc:  # weather API down -> fall back to a neutral night
         return {"summary": f"Weather unavailable ({exc.__class__.__name__})", "location": loc.get("place", "")}
+    # Migration: the BirdCast-method estimate replaces the simple one when the model is reachable.
+    try:
+        live = live | migration.estimate(loc["lat"], loc["lon"])
+    except Exception as exc:
+        log.warning("migration model unavailable, using the simple estimate: %s", str(exc)[:160])
+        live = live | {"migration_source": "Simple weather estimate"}
+    live["ebird"] = ebird.recent(loc["lat"], loc["lon"])
     if live.get("source") != "No forecast available":
         _cache[key] = (time.monotonic(), live)  # don't cache a failed fetch; retry next call
     return live

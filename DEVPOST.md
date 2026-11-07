@@ -49,13 +49,16 @@ remembering, every night, for every window. We wanted a system that decides, win
 
 ## What is real vs estimated
 - **Real:** night photos of UB buildings taken on [date]; tonight's Buffalo weather from the National Weather Service.
-- **Estimated:** migration level, inferred from wind direction, precipitation and season (not radar counts);
+- **Estimated:** migration level, computed with the factors of the BirdCast forecast model (Van Doren & Horton,
+  Science 2018: season, tailwind, temperature and pressure change, rain) on NOAA GFS weather, and checked against
+  live eBird sightings near the building. It is not a radar measurement; we link to BirdCast's radar dashboard;
   energy savings use ~60 W per lit window over 8 hours.
 - **Simulated:** the lights switch on a digital twin of the building, not real building controls. The same
   WebSocket commands could drive a real building management system or smart switches.
 
 ## What's next
-- Live migration forecasts (e.g. BirdCast radar) instead of the weather-based estimate.
+- BirdCast radar migration data (partnership/API access) in place of our weather-based estimate, or our own
+  processing of NOAA NEXRAD radar (free on AWS) to measure birds aloft.
 - Connect to real building automation (BACnet) or smart plugs.
 - Fixed cameras for nightly automatic checks across campus.
 

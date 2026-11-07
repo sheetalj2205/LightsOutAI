@@ -20,6 +20,9 @@ ELEVENLABS_API_KEY = os.getenv("ELEVENLABS_API_KEY", "")
 ELEVENLABS_VOICE_ID = os.getenv("ELEVENLABS_VOICE_ID", "") or "21m00Tcm4TlvDq8Ikt00"
 ELEVENLABS_MODEL = os.getenv("ELEVENLABS_MODEL", "eleven_multilingual_v2")
 
+# eBird (Cornell Lab) API key for live bird sightings near the building: https://ebird.org/api/keygen
+EBIRD_API_KEY = os.getenv("EBIRD_API_KEY", "")
+
 # BullsAI Model Hub (UB-hosted models, OpenAI-compatible API). Used when Gemini fails.
 BULLSAI_API_KEY = os.getenv("BULLSAI_API_KEY", "")
 BULLSAI_BASE_URL = os.getenv("BULLSAI_BASE_URL", "").rstrip("/")

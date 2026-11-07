@@ -1,6 +1,6 @@
 import pytest
 
-from app import config, decide, geo, scenarios, weather
+from app import config, decide, ebird, geo, migration, scenarios, weather
 
 TEST_PLACE = {"lat": 41.88, "lon": -87.63, "place": "Testville, IL", "matched": "1 Test St, Testville, IL"}
 
@@ -17,4 +17,9 @@ def no_external_services(monkeypatch):
         "source": "Test forecast", "source_url": "https://example.test/forecast", "updated": "2026-11-07T20:00:00+00:00"})
     monkeypatch.setattr(scenarios, "_cache", {})
     decide._answers.clear()
+    monkeypatch.setattr(config, "EBIRD_API_KEY", "")
+    monkeypatch.setattr(migration, "estimate", lambda lat, lon: {
+        "migration_level": "medium", "migration_index": 0.4, "migration_source": "Test migration model",
+        "birdcast_url": "https://dashboard.birdcast.org/",
+        "migration_factors": [{"label": "NW wind 9 mph · tailwind", "effect": "up"}]})
     monkeypatch.setattr(geo, "geocode", lambda address: TEST_PLACE | {"matched": address})
