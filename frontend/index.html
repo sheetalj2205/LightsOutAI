@@ -3,136 +3,164 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Lights Out AI · Dashboard</title>
-  <link rel="stylesheet" href="css/style.css" />
+  <title>Lights Out AI</title>
+  <meta name="description" content="Turning off the building lights that kill migrating birds." />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🐦</text></svg>" />
+  <link rel="stylesheet" href="css/story.css" />
+  <script type="importmap">
+    { "imports": { "three": "./vendor/three/three.module.js", "three/addons/": "./vendor/three/addons/" } }
+  </script>
 </head>
 <body>
   <header class="topbar">
     <div class="brand">
-      <div class="logo">🐦</div>
+      <span class="logo" aria-hidden="true">🐦</span>
       <div>
-        <h1>Lights Out AI</h1>
-        <small>Turning off the lights that kill migrating birds · Buffalo, NY</small>
+        <div class="name">Lights Out AI</div>
+        <div class="tagline">Turning off the lights that kill migrating birds · Buffalo, NY</div>
       </div>
     </div>
-    <div class="spacer"></div>
-    <select id="buildingSelect" title="Building"></select>
-    <a class="btn small" href="twin.html" target="_blank">Open twin screen</a>
-    <button class="btn small" id="fakeBtn" title="Use built-in fake data if the backend is down">Fake mode: off</button>
-    <div class="status" id="status"><span class="dot"></span><span id="statusText">Connecting…</span></div>
-    <div class="clock" id="clock"></div>
+    <div class="topbar-right">
+      <label class="building-pick">
+        <span class="sr">Building</span>
+        <select id="buildingSelect"></select>
+      </label>
+      <span class="status" id="status"><i></i><b id="statusText">Connecting…</b></span>
+      <span class="clock" id="clock"></span>
+      <details class="menu">
+        <summary aria-label="More">⋯</summary>
+        <div class="menu-body">
+          <button type="button" id="fakeBtn">Fake mode: off</button>
+          <a href="twin.html" target="_blank">Open twin screen ↗</a>
+          <a href="classic.html">Classic dashboard</a>
+          <a id="docsLink" href="/docs" target="_blank">API docs ↗</a>
+        </div>
+      </details>
+    </div>
   </header>
 
-  <main class="layout">
-    <!-- Left: the twin building -->
-    <section class="card">
-      <h2>
-        Digital twin · <span id="buildingName" style="text-transform:none;letter-spacing:0;color:var(--text)">…</span>
-        <label class="right muted"><input type="checkbox" id="riskToggle" checked /> Show risk colors</label>
-      </h2>
-      <div id="twin"></div>
-      <div class="legend">
-        <span><i style="background:var(--warm)"></i>On</span>
-        <span><i style="background:var(--dim)"></i>Dim</span>
-        <span><i style="background:var(--off);border:1px solid #333"></i>Off</span>
-        <span><i style="outline:3px solid var(--bad);outline-offset:-3px"></i>High risk</span>
-        <span><i style="outline:3px solid var(--mid);outline-offset:-3px"></i>Medium</span>
-        <span><i style="outline:3px solid var(--good);outline-offset:-3px"></i>Low</span>
-        <span><i style="background:var(--good);border-radius:50%;width:8px;height:8px"></i>Lobby, always on</span>
+  <nav class="steps" aria-label="Demo steps">
+    <button type="button" class="step" data-go="1"><span class="num">1</span><span><b>Tonight's sky</b><small>How risky is tonight for birds?</small></span></button>
+    <span class="step-line"></span>
+    <button type="button" class="step" data-go="2"><span class="num">2</span><span><b>AI decides</b><small>Which windows go dark</small></span></button>
+    <span class="step-line"></span>
+    <button type="button" class="step" data-go="3"><span class="num">3</span><span><b>Impact</b><small>Risk, energy and money saved</small></span></button>
+  </nav>
+
+  <main class="stage">
+    <section class="viewer" aria-label="3D building">
+      <div id="scene"></div>
+      <div class="viewer-top">
+        <span class="chip" id="buildingName">Loading…</span>
+        <label class="switch"><input type="checkbox" id="riskToggle" /><span></span>Risk view</label>
+      </div>
+      <div class="viewer-bottom">
+        <div class="legend" id="legendLight">
+          <span><i class="lit"></i>Lit</span><span><i class="dim"></i>Dimmed</span><span><i class="off"></i>Off</span>
+        </div>
+        <div class="legend hidden" id="legendRisk">
+          <span><i class="r-low"></i>Low risk</span><span><i class="r-mid"></i>Medium</span><span><i class="r-high"></i>High</span>
+        </div>
+        <span class="caption">Drag to rotate · birds are an illustration</span>
       </div>
     </section>
 
-    <!-- Right: conditions, controls, risk, AI reason -->
-    <section class="stack">
-      <div class="card">
-        <h2>Tonight's conditions <span class="right" id="scenarioTag"></span></h2>
-        <div class="cond-summary" id="condSummary">Loading…</div>
-        <div class="stats">
-          <div class="stat">
-            <div class="label">Migration <span class="tag">estimated</span></div>
-            <div class="value"><span class="chip medium" id="migChip">…</span></div>
+    <aside class="card step-card" aria-live="polite">
+      <!-- Step 1 -->
+      <div class="pane" data-step="1">
+        <div class="eyebrow">Step 1 · Tonight's sky</div>
+        <h2 id="condSummary">Loading tonight's weather…</h2>
+        <p class="explain">Birds migrate at night. Fog and low clouds push them lower, where lit windows pull them in.</p>
+        <div class="tiles">
+          <div class="tile">
+            <div class="label">Migration</div>
+            <div class="badge" id="migBadge">…</div>
+            <div class="hint">estimated from weather</div>
           </div>
-          <div class="stat">
+          <div class="tile">
             <div class="label">Sky danger</div>
             <div class="value" id="skyDanger">…</div>
-            <div class="bar"><span id="skyBar" style="width:0;background:var(--mid)"></span></div>
+            <div class="bar"><span id="skyBar"></span></div>
           </div>
-          <div class="stat">
-            <div class="label">Wind · clouds</div>
-            <div class="value" id="wind">…</div>
-          </div>
-        </div>
-        <div class="row" style="margin-top:14px">
-          <span class="muted" style="font-size:13px">Simulate night:</span>
-          <button class="btn small scen" data-s="live">Live weather</button>
-          <button class="btn small scen" data-s="clear">Clear</button>
-          <button class="btn small scen" data-s="foggy_migration">Foggy migration</button>
-        </div>
-      </div>
-
-      <div class="row">
-        <button class="btn primary" id="decideBtn" style="flex:1">⚡ Let the AI decide</button>
-        <button class="btn" id="resetBtn" title="Turn every window back on, as in the photo">Reset</button>
-      </div>
-
-      <div class="card">
-        <h2>Bird collision risk</h2>
-        <div class="meter">
-          <div class="side">
-            <div class="label">Before</div>
-            <div class="big" id="riskBefore">-</div>
-          </div>
-          <div class="arrow">→</div>
-          <div class="side">
-            <div class="label">After</div>
-            <div class="big" id="riskAfter">-</div>
+          <div class="tile">
+            <div class="label">Building risk now</div>
+            <div class="value" id="riskNow">…</div>
+            <div class="bar"><span id="riskNowBar"></span></div>
           </div>
         </div>
-        <div style="margin-top:12px" class="stack">
-          <div class="bar"><span id="barBefore" style="width:0;background:var(--bad)"></span></div>
-          <div class="bar"><span id="barAfter" style="width:0;background:var(--good)"></span></div>
+        <div class="label space">Simulate a night</div>
+        <div class="segmented" role="group" aria-label="Scenario">
+          <button type="button" data-s="live">Live weather</button>
+          <button type="button" data-s="clear">Clear</button>
+          <button type="button" data-s="foggy_migration">Foggy migration</button>
         </div>
-        <div class="drop" id="riskDrop"></div>
+        <button type="button" class="btn primary wide" data-go="2">Next: let the AI decide →</button>
       </div>
 
-      <div class="card">
-        <h2>AI decision <span class="right source muted" id="source"></span></h2>
-        <div class="reason" id="reason"><span class="muted">Press "Let the AI decide" to choose which windows to turn off.</span></div>
-        <div class="row" style="margin-top:10px">
-          <button class="btn small" id="replayBtn" disabled>🔊 Play voice alert</button>
-          <label class="muted" style="font-size:13px"><input type="checkbox" id="voiceToggle" checked /> Speak automatically</label>
-          <span class="muted" id="voiceInfo" style="font-size:12px"></span>
-        </div>
-        <div class="savings">
-          <div class="stat"><div class="label">Windows off / dimmed</div><div class="value" id="countOff">-</div></div>
-          <div class="stat"><div class="label">Energy saved tonight</div><div class="value" id="kwh">-</div></div>
-          <div class="stat"><div class="label">Money saved</div><div class="value" id="usd">-</div></div>
-        </div>
+      <!-- Step 2 -->
+      <div class="pane" data-step="2">
+        <div class="eyebrow">Step 2 · AI decides</div>
+        <h2>Which windows should go dark tonight?</h2>
+        <p class="explain">The AI looks at the real photo, every window's risk and tonight's sky, then picks
+          windows to turn off or dim. The ground-floor lobby always stays on.</p>
+        <button type="button" class="btn primary huge" id="decideBtn">
+          <span class="when-idle">⚡ Let the AI decide</span>
+          <span class="when-busy"><i class="spinner"></i> Thinking…</span>
+        </button>
+        <div class="ai-chain">Gemini → backup BullsAI (UB) → rule-based safety net</div>
+        <button type="button" class="btn ghost" data-go="1">← Back to tonight's sky</button>
       </div>
-    </section>
 
-    <!-- Bottom: before / after on the real photo -->
-    <section class="card full">
-      <h2>Real photo: before and after
-        <label class="right muted"><input type="checkbox" id="debugToggle" /> Show detected windows</label>
-      </h2>
-      <div class="ba">
-        <figure>
-          <figcaption>Before · <span id="beforeLabel">as photographed</span></figcaption>
-          <div id="beforeBox"></div>
-        </figure>
-        <figure>
-          <figcaption>After · chosen windows darkened</figcaption>
-          <div id="afterBox"></div>
-        </figure>
+      <!-- Step 3 -->
+      <div class="pane" data-step="3">
+        <div class="eyebrow">Step 3 · Impact</div>
+        <div class="impact">
+          <div class="impact-big"><span id="riskDrop">–</span><small>less collision risk</small></div>
+          <div class="impact-scores">
+            <div><span class="label">Before</span><b id="riskBefore">–</b></div>
+            <span class="arrow">→</span>
+            <div><span class="label">After</span><b id="riskAfter">–</b></div>
+          </div>
+        </div>
+        <div class="bars">
+          <div class="bar big"><span id="barBefore" class="bad"></span></div>
+          <div class="bar big"><span id="barAfter" class="good"></span></div>
+        </div>
+        <div class="tiles">
+          <div class="tile"><div class="label">Windows off / dimmed</div><div class="value" id="countOff">–</div></div>
+          <div class="tile"><div class="label">Energy saved tonight</div><div class="value" id="kwh">–</div></div>
+          <div class="tile"><div class="label">Money saved tonight</div><div class="value" id="usd">–</div></div>
+        </div>
+        <blockquote class="reason">
+          <p id="reason">–</p>
+          <footer><span class="source" id="source"></span>
+            <button type="button" class="btn small" id="replayBtn">🔊 Play voice alert</button></footer>
+        </blockquote>
+        <button type="button" class="btn ghost" id="startOver">↺ Start over</button>
       </div>
-    </section>
+    </aside>
   </main>
 
-  <div class="toast" id="toast"></div>
+  <section class="card photo" id="photoSection" hidden>
+    <div class="photo-head">
+      <div>
+        <div class="eyebrow">The real building</div>
+        <h2>Night photo: before and after</h2>
+      </div>
+      <label class="switch"><input type="checkbox" id="debugToggle" /><span></span>Show detected windows</label>
+    </div>
+    <div class="compare" id="compare">
+      <img id="imgBefore" alt="Night photo of the building as taken" />
+      <div class="after-clip" id="afterClip"><img id="imgAfter" alt="Same photo with the chosen windows darkened" /></div>
+      <div class="handle" id="handle"><span>⟷</span></div>
+      <span class="tag left">Before</span><span class="tag right" id="afterTag">After the AI acts</span>
+      <input type="range" id="slider" min="0" max="100" value="50" aria-label="Before and after" />
+    </div>
+  </section>
+
+  <div class="toast" id="toast" role="status"></div>
 
   <script src="js/api.js"></script>
-  <script src="js/twin.js"></script>
-  <script src="js/dashboard.js"></script>
+  <script type="module" src="js/story.js"></script>
 </body>
 </html>

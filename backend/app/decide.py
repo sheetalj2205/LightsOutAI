@@ -115,7 +115,7 @@ def _gemini_decision(windows: list[Window], cond: Conditions,
     from google.genai import types
 
     client = genai.Client(api_key=config.GEMINI_API_KEY,
-                          http_options=types.HttpOptions(timeout=20_000))
+                          http_options=types.HttpOptions(timeout=12_000))
     contents: list = [_build_prompt(windows, cond)]
     if photo:
         contents.insert(0, types.Part.from_bytes(data=photo, mime_type="image/jpeg"))
@@ -132,7 +132,7 @@ def bullsai_ready() -> bool:
     return bool(config.BULLSAI_API_KEY and config.BULLSAI_BASE_URL and config.BULLSAI_MODEL)
 
 
-def bullsai_chat(prompt: str, timeout: float = 25) -> str:
+def bullsai_chat(prompt: str, timeout: float = 15) -> str:
     """One chat call to the BullsAI Model Hub (OpenAI-compatible /chat/completions)."""
     import httpx
 

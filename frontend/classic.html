@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Lights Out AI · Dashboard</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <div class="logo">🐦</div>
+      <div>
+        <h1>Lights Out AI</h1>
+        <small>Turning off the lights that kill migrating birds · Buffalo, NY</small>
+      </div>
+    </div>
+    <div class="spacer"></div>
+    <select id="buildingSelect" title="Building"></select>
+    <a class="btn small" href="twin.html" target="_blank">Open twin screen</a>
+    <button class="btn small" id="fakeBtn" title="Use built-in fake data if the backend is down">Fake mode: off</button>
+    <div class="status" id="status"><span class="dot"></span><span id="statusText">Connecting…</span></div>
+    <div class="clock" id="clock"></div>
+  </header>
+
+  <main class="layout">
+    <!-- Left: the twin building -->
+    <section class="card">
+      <h2>
+        Digital twin · <span id="buildingName" style="text-transform:none;letter-spacing:0;color:var(--text)">…</span>
+        <label class="right muted"><input type="checkbox" id="riskToggle" checked /> Show risk colors</label>
+      </h2>
+      <div id="twin"></div>
+      <div class="legend">
+        <span><i style="background:var(--warm)"></i>On</span>
+        <span><i style="background:var(--dim)"></i>Dim</span>
+        <span><i style="background:var(--off);border:1px solid #333"></i>Off</span>
+        <span><i style="outline:3px solid var(--bad);outline-offset:-3px"></i>High risk</span>
+        <span><i style="outline:3px solid var(--mid);outline-offset:-3px"></i>Medium</span>
+        <span><i style="outline:3px solid var(--good);outline-offset:-3px"></i>Low</span>
+        <span><i style="background:var(--good);border-radius:50%;width:8px;height:8px"></i>Lobby, always on</span>
+      </div>
+    </section>
+
+    <!-- Right: conditions, controls, risk, AI reason -->
+    <section class="stack">
+      <div class="card">
+        <h2>Tonight's conditions <span class="right" id="scenarioTag"></span></h2>
+        <div class="cond-summary" id="condSummary">Loading…</div>
+        <div class="stats">
+          <div class="stat">
+            <div class="label">Migration <span class="tag">estimated</span></div>
+            <div class="value"><span class="chip medium" id="migChip">…</span></div>
+          </div>
+          <div class="stat">
+            <div class="label">Sky danger</div>
+            <div class="value" id="skyDanger">…</div>
+            <div class="bar"><span id="skyBar" style="width:0;background:var(--mid)"></span></div>
+          </div>
+          <div class="stat">
+            <div class="label">Wind · clouds</div>
+            <div class="value" id="wind">…</div>
+          </div>
+        </div>
+        <div class="row" style="margin-top:14px">
+          <span class="muted" style="font-size:13px">Simulate night:</span>
+          <button class="btn small scen" data-s="live">Live weather</button>
+          <button class="btn small scen" data-s="clear">Clear</button>
+          <button class="btn small scen" data-s="foggy_migration">Foggy migration</button>
+        </div>
+      </div>
+
+      <div class="row">
+        <button class="btn primary" id="decideBtn" style="flex:1">⚡ Let the AI decide</button>
+        <button class="btn" id="resetBtn" title="Turn every window back on, as in the photo">Reset</button>
+      </div>
+
+      <div class="card">
+        <h2>Bird collision risk</h2>
+        <div class="meter">
+          <div class="side">
+            <div class="label">Before</div>
+            <div class="big" id="riskBefore">-</div>
+          </div>
+          <div class="arrow">→</div>
+          <div class="side">
+            <div class="label">After</div>
+            <div class="big" id="riskAfter">-</div>
+          </div>
+        </div>
+        <div style="margin-top:12px" class="stack">
+          <div class="bar"><span id="barBefore" style="width:0;background:var(--bad)"></span></div>
+          <div class="bar"><span id="barAfter" style="width:0;background:var(--good)"></span></div>
+        </div>
+        <div class="drop" id="riskDrop"></div>
+      </div>
+
+      <div class="card">
+        <h2>AI decision <span class="right source muted" id="source"></span></h2>
+        <div class="reason" id="reason"><span class="muted">Press "Let the AI decide" to choose which windows to turn off.</span></div>
+        <div class="row" style="margin-top:10px">
+          <button class="btn small" id="replayBtn" disabled>🔊 Play voice alert</button>
+          <label class="muted" style="font-size:13px"><input type="checkbox" id="voiceToggle" checked /> Speak automatically</label>
+          <span class="muted" id="voiceInfo" style="font-size:12px"></span>
+        </div>
+        <div class="savings">
+          <div class="stat"><div class="label">Windows off / dimmed</div><div class="value" id="countOff">-</div></div>
+          <div class="stat"><div class="label">Energy saved tonight</div><div class="value" id="kwh">-</div></div>
+          <div class="stat"><div class="label">Money saved</div><div class="value" id="usd">-</div></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Bottom: before / after on the real photo -->
+    <section class="card full">
+      <h2>Real photo: before and after
+        <label class="right muted"><input type="checkbox" id="debugToggle" /> Show detected windows</label>
+      </h2>
+      <div class="ba">
+        <figure>
+          <figcaption>Before · <span id="beforeLabel">as photographed</span></figcaption>
+          <div id="beforeBox"></div>
+        </figure>
+        <figure>
+          <figcaption>After · chosen windows darkened</figcaption>
+          <div id="afterBox"></div>
+        </figure>
+      </div>
+    </section>
+  </main>
+
+  <div class="toast" id="toast"></div>
+
+  <script src="js/api.js"></script>
+  <script src="js/twin.js"></script>
+  <script src="js/dashboard.js"></script>
+</body>
+</html>
