@@ -20,7 +20,7 @@ from fastapi.staticfiles import StaticFiles
 from . import config, db, decide as decider, detection, facade, geo, risk, scenarios, voice
 from .demo import make_demo_photo
 from .led import LedView
-from .models import AlertRequest, DecideRequest, SimulateRequest
+from .models import AlertRequest, DecideRequest, LocationRequest, SimulateRequest
 from .state import Building, hub, state
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
@@ -37,11 +37,22 @@ class NeedGrid(Exception):
     """Could not find the windows and the AI could not read the facade: ask for floors/cols."""
 
 
-def _cond(b: Optional[Building] = None):
-    """Tonight's conditions at the given (default: current) building's location."""
+def _cond_or_none(b: Optional[Building] = None):
+    """Tonight's forecast at the building's (default: current) location, or None without an address."""
     if b is None:
         b = state.buildings.get(state.current)
-    return scenarios.current_conditions(b.location if b else None)
+    try:
+        return scenarios.current_conditions(b.location if b else None)
+    except scenarios.NoLocation:
+        return None
+
+
+def _cond(b: Optional[Building] = None):
+    """Like _cond_or_none, but answers HTTP 409 when the building has no address yet."""
+    cond = _cond_or_none(b)
+    if cond is None:
+        raise HTTPException(409, "Add this building's address first, so we can read its local forecast.")
+    return cond
 
 
 def _analyze(name: str, photo: bytes, threshold: int, corners=None, floors=None, cols=None,
@@ -73,7 +84,8 @@ def _analyze(name: str, photo: bytes, threshold: int, corners=None, floors=None,
             windows = facade.simulate_windows(img, f, c, pts, seed=name)
             lights = "simulated"
             method = "ai-facade" if info else "manual"
-    windows = risk.score_windows(windows, scenarios.current_conditions(location))
+    if location:
+        windows = risk.score_windows(windows, scenarios.current_conditions(location))
 
     folder = config.OUTPUT_DIR / _slug(name)
     folder.mkdir(parents=True, exist_ok=True)
@@ -95,7 +107,7 @@ def _load_saved_results() -> None:
             data = json.loads(f.read_text())
             photo = (f.parent / "photo.jpg").read_bytes()
             _analyze(data["building"], photo, data.get("threshold", config.DETECT_THRESHOLD),
-                     data.get("corners"), data.get("floors"), data.get("cols"))
+                     data.get("corners"), data.get("floors"), data.get("cols"), data.get("location"))
             log.info("loaded saved building %s", data["building"])
         except Exception as exc:
             log.warning("could not load %s: %s", f, exc)
@@ -149,8 +161,8 @@ def buildings():
 def windows(building: Optional[str] = None):
     """Current window list of a building (default: the current one), for the twin page."""
     b = _get_building(building)
-    cond = _cond(b)
-    return b.summary() | {"risk": risk.building_risk(b.windows, cond)}
+    cond = _cond_or_none(b)
+    return b.summary() | {"risk": risk.building_risk(b.windows, cond) if cond else None}
 
 
 @app.post("/api/select")
@@ -175,9 +187,7 @@ async def analyze(photo: UploadFile = File(...), building: str = Form("Building"
     building = (building or "Building").strip()[:80] or "Building"
     location = None
     if address and address.strip():
-        hit = await asyncio.to_thread(geo.geocode, address)
-        location = ({"address": address.strip(), "found": True} | hit) if hit else \
-            {"address": address.strip(), "found": False, **scenarios.BUFFALO}
+        location = await _locate(address)
     pts = None
     if corners:
         try:
@@ -193,8 +203,30 @@ async def analyze(photo: UploadFile = File(...), building: str = Form("Building"
     except ValueError as exc:
         raise HTTPException(400, f"{exc}. Please use a JPG or PNG photo.")
     await hub.broadcast({"type": "building"} | b.summary())
+    cond = _cond_or_none(b)
+    return b.summary() | {"risk": risk.building_risk(b.windows, cond) if cond else None,
+                          "conditions": cond.model_dump() if cond else None}
+
+
+async def _locate(address: str) -> dict:
+    """Address -> {address, lat, lon, place, matched}, or HTTP 422 if nobody can find it."""
+    hit = await asyncio.to_thread(geo.geocode, address)
+    if not hit:
+        raise HTTPException(422, f"Couldn't find \"{address.strip()}\". Try adding the city and state or country.")
+    return {"address": address.strip()} | hit
+
+
+@app.post("/api/location")
+async def set_location(req: LocationRequest):
+    """Set (or change) a building's address. Its local forecast is used from then on."""
+    b = _get_building(req.building)
+    b.location = await _locate(req.address)
     cond = _cond(b)
-    return b.summary() | {"risk": risk.building_risk(b.windows, cond), "conditions": cond.model_dump()}
+    b.windows = risk.score_windows(b.windows, cond)
+    b.original = risk.score_windows(b.original, cond)
+    await hub.broadcast({"type": "building"} | b.summary())
+    await hub.broadcast({"type": "conditions"} | cond.model_dump())
+    return {"location": b.location, "conditions": cond.model_dump(), "risk": risk.building_risk(b.windows, cond)}
 
 
 @app.post("/api/decide")
@@ -203,7 +235,7 @@ async def decide(req: DecideRequest):
     b = _get_building(req.building)
     if req.windows:
         b.windows = req.windows
-    cond = _cond()
+    cond = _cond(b)
     risk_now = {w.id: w.risk for w in risk.score_windows(b.windows, cond)}  # risk before the change
     result = await asyncio.to_thread(decider.decide, b.windows, cond, b.photo)
     b.windows = result["windows"]
@@ -309,7 +341,8 @@ async def ws_endpoint(ws: WebSocket):
                 wid, st = int(msg["id"]), msg.get("state")
                 hub.confirmed[wid] = st
                 b = state.buildings.get(state.current)
-                scored = risk.score_windows(b.original, _cond()) if b else []
+                cond = _cond_or_none(b) if b else None
+                scored = risk.score_windows(b.original, cond) if cond else []
                 r = next((x.risk for x in scored if x.id == wid), 0.0)
                 asyncio.create_task(asyncio.to_thread(
                     db.log_rows, state.current, [(wid, r, st)], "confirmed"))

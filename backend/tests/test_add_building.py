@@ -31,18 +31,18 @@ def test_day_photo_with_manual_grid(monkeypatch):
         assert b["lights"] == "simulated" and b["method"] == "manual"
         assert b["floors"] == 12 and b["cols"] == 8 and len(b["windows"]) == 96
         assert all(w["state"] == "on" for w in b["windows"] if w["floor"] == 1)  # lobby always lit
-        assert b["location"]["place"] == "Chicago, IL" and b["location"]["found"]
+        assert b["location"]["place"] == "Chicago, IL"
         assert client.get("/api/windows").json()["building"] == "Manual Tower"
 
 
 def test_day_photo_read_by_ai(monkeypatch):
     monkeypatch.setattr(facade, "read_facade", lambda photo: {
         "floors": 9, "cols": 6, "corners": [[0.2, 0.1], [0.8, 0.1], [0.8, 0.9], [0.2, 0.9]], "is_night": False})
-    monkeypatch.setattr(geo, "geocode", lambda a: None)  # address not found -> Buffalo weather
     with TestClient(app) as client:
-        b = post(client, building="AI Tower", address="nowhere 123").json()
+        b = post(client, building="AI Tower", address="1 Test St, Testville").json()
         assert b["method"] == "ai-facade" and b["floors"] == 9 and b["cols"] == 6
-        assert b["location"]["found"] is False and b["location"]["place"] == "Buffalo, NY"
+        assert b["location"]["place"] == "Testville, IL"
+        assert b["conditions"]["source"] == "Test forecast"
         xs = [w["x"] for w in b["windows"]]
         assert min(xs) >= 0.18 * 800 - 5 and max(xs) <= 0.8 * 800  # inside the facade corners
 
@@ -50,3 +50,10 @@ def test_day_photo_read_by_ai(monkeypatch):
 def test_parse_facade_answer():
     info = facade._parse('```json\n{"floors": 120, "windows_per_floor": 7, "corners": [[0,0],[1,0],[1,1]], "is_night": true}\n```')
     assert info["floors"] == facade.MAX_FLOORS and info["cols"] == 7 and info["corners"] is None and info["is_night"]
+
+
+def test_unknown_address_is_rejected(monkeypatch):
+    monkeypatch.setattr(geo, "geocode", lambda a: None)
+    with TestClient(app) as client:
+        r = post(client, building="Lost Tower", address="nowhere 123", floors="5", cols="5")
+        assert r.status_code == 422 and "Couldn't find" in r.json()["detail"]

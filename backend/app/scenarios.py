@@ -27,20 +27,20 @@ _active = "live"
 CACHE_SECONDS = 600
 _cache: dict[tuple, tuple[float, dict]] = {}
 
-BUFFALO = {"lat": weather.LAT, "lon": weather.LON, "place": "Buffalo, NY"}
+class NoLocation(Exception):
+    """The building has no address yet, so there is no forecast to read."""
 
 
-def _live_weather(location: Optional[dict] = None) -> dict:
-    loc = location or BUFFALO
+def _live_weather(loc: dict) -> dict:
     key = (round(loc["lat"], 3), round(loc["lon"], 3))
     hit = _cache.get(key)
     if hit and time.monotonic() - hit[0] < CACHE_SECONDS:
         return hit[1]
     try:
-        live = weather.get_conditions(loc["lat"], loc["lon"], loc.get("place") or "Buffalo, NY")
+        live = weather.get_conditions(loc["lat"], loc["lon"], loc.get("place") or loc.get("address", ""))
     except Exception as exc:  # weather API down -> fall back to a neutral night
         return {"summary": f"Weather unavailable ({exc.__class__.__name__})", "location": loc.get("place", "")}
-    if "fallback" not in live.get("summary", ""):
+    if live.get("source") != "No forecast available":
         _cache[key] = (time.monotonic(), live)  # don't cache a failed fetch; retry next call
     return live
 
@@ -57,7 +57,9 @@ def active_scenario() -> str:
 
 
 def current_conditions(location: Optional[dict] = None) -> Conditions:
-    """Live conditions from the weather module, unless a demo scenario is active."""
+    """Tonight's forecast at the building's location (unless a demo scenario is active)."""
+    if not location:
+        raise NoLocation("This building has no address yet.")
     live = _live_weather(location)
     data = {**live, "time": datetime.now().isoformat(timespec="minutes")}
     if _active != "live":

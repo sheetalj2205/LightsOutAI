@@ -24,7 +24,7 @@ class Building:
     after_url: str = ""
     method: str = "detect"
     original: list[Window] = field(default_factory=list)  # as detected, for "reset"
-    location: Optional[dict] = None  # {address, lat, lon, place, found}; None = Buffalo
+    location: Optional[dict] = None  # {address, lat, lon, place}; None until the user gives an address
     lights: str = "detected"         # "detected" (night photo) or "simulated" (day photo)
 
     def summary(self) -> dict:
@@ -35,7 +35,7 @@ class Building:
             "image_width": self.image_size[0], "image_height": self.image_size[1],
             "photo_url": self.photo_url, "debug_url": self.debug_url, "after_url": self.after_url,
             "method": self.method, "lights": self.lights,
-            "location": self.location or {"place": "Buffalo, NY", "address": "", "found": True},
+            "location": self.location,
             "windows": [w.model_dump() for w in self.windows],
         }
 

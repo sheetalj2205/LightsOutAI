@@ -15,11 +15,12 @@ The server starts with a built-in **Demo Hall** building, so every call below wo
 
 | Call | What you get |
 |------|-------------|
-| `GET /api/conditions` | `{time, location, summary, sky_cover, fog, rain, wind_dir, wind_speed_mph, migration_level, migration_estimated, sky_danger, scenario}` |
+| `GET /api/conditions` | Tonight's forecast **at the current building's address**: `{time, location, summary, sky_cover, fog, rain, wind_dir, wind_speed_mph, migration_level, migration_estimated, sky_danger, scenario, source, source_url, updated}`. **409** if the building has no address yet |
+| `POST /api/location` (JSON `{"address": "...", "building": optional}`) | Sets/changes a building's address → `{location, conditions, risk}`. **422** if the address can't be found |
 | `GET /api/windows` | Current building: `{building, floors, cols, image_width, image_height, photo_url, debug_url, after_url, windows: [...], risk}` |
 | `GET /api/buildings` | List of analyzed buildings + which one is current |
 | `POST /api/select` (form: `building`) | Switch the current building (twin pages redraw) |
-| `POST /api/analyze` (form: `photo` file, `building`, optional `threshold`) | Detects windows in a photo; same shape as `/api/windows` + `conditions` |
+| `POST /api/analyze` (form: `photo` file, `building`, `address`, optional `floors`, `cols`, `threshold`) | Night photo: detects lit windows. Day photo: AI counts floors/windows, lights simulated (`lights: "simulated"`). Returns `/api/windows` shape + `location` + `conditions`. 422 if the address or the floors can't be found |
 | `POST /api/decide` (JSON `{}`) | `{building, actions:[{id,state}], risk_before, risk_after, reason, source, conditions, windows, energy_saved_kwh, money_saved_usd, photo_url, after_url}` and sends the commands to twin pages |
 | `POST /api/simulate` (JSON `{"scenario": "clear" \| "foggy_migration" \| "live"}`) | The new conditions |
 | `POST /api/reset` | All windows back to how they were in the photo (to run the demo again) |
@@ -29,7 +30,7 @@ The server starts with a built-in **Demo Hall** building, so every call below wo
 Image URLs (`photo_url`, `debug_url`, `after_url`) are paths: prefix them with the base URL.
 `after_url` is the real photo with the chosen windows darkened — ready for the before/after view.
 
-**Demo button flow:** `POST /api/simulate {"scenario":"foggy_migration"}` → `POST /api/decide {}` → show
+**Demo flow:** building has an address (else `POST /api/location`) → `POST /api/decide {}` (409 without an address) → show
 `reason`, `risk_before → risk_after`, savings, and play the voice alert for `reason`.
 
 ## WebSocket `/ws`
@@ -55,3 +56,9 @@ ws.onmessage = (e) => {
 Connect to `/ws?device=led&floors=5&cols=6`. The building is mapped onto that grid and the board gets
 `{"type":"frame","states":"OODF…","colors":[…]}` then `{"led": 7, "state": "off"}`, and replies with `"ok": true`.
 Twin pages are not affected. `GET /api/health` shows `led_boards`. See [hardware/README.md](hardware/README.md).
+
+## Weather sources
+No location is hardcoded. The forecast always comes from the building's address:
+U.S. National Weather Service (api.weather.gov) for US addresses, Open-Meteo (open-meteo.com) elsewhere.
+`source`, `source_url` (the human-readable forecast page) and `updated` say which one, so the page can cite it.
+Addresses are found with the US Census geocoder, then OpenStreetMap Nominatim.

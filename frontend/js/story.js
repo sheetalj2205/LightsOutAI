@@ -97,7 +97,7 @@ function applyBuilding(b, opts = {}) {
     where.textContent = ` · ${place}`;
     $("buildingName").append(where);
   }
-  if (typeof b.risk === "number") setRiskNow(b.risk);
+  setRiskNow(b.risk);
   showPhoto();
 }
 
@@ -125,10 +125,45 @@ function goTo(n) {
   });
 }
 
-// ---------------------------------------------------------------- step 1: conditions
+// ---------------------------------------------------------------- step 1: tonight's forecast
+let hasForecast = false;
+
+function fmtTime(iso) {
+  const d = iso ? new Date(iso) : null;
+  return d && !isNaN(d) ? d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : "";
+}
+
 function showConditions(c) {
-  $("condSummary").textContent = c.summary || "Tonight's weather";
-  $("skyEyebrow").textContent = c.location ? `Step 1 · Tonight's sky · ${c.location}` : "Step 1 · Tonight's sky";
+  hasForecast = true;
+  $("condSummary").textContent = c.summary || "Tonight's forecast";
+  $("skyEyebrow").textContent = "Step 1 · Tonight's sky";
+  $("whereForm").hidden = true;
+  $("whereLine").hidden = false;
+  $("wherePlace").textContent = c.location || "";
+  $("whereChange").hidden = LO.fake;
+  $("condTiles").hidden = false;
+  $("nextBtn").disabled = false;
+
+  // Where the forecast came from, with a link to the source's own page.
+  const src = $("sourceLine");
+  src.innerHTML = "";
+  if (c.source) {
+    src.append("Forecast: ");
+    if (c.source_url) {
+      const a = document.createElement("a");
+      a.href = c.source_url;
+      a.target = "_blank";
+      a.rel = "noopener";
+      a.textContent = `${c.source} ↗`;
+      src.append(a);
+    } else {
+      src.append(c.source);
+    }
+    const t = fmtTime(c.updated);
+    if (t) src.append(` · updated ${t}`);
+  }
+  src.hidden = !c.source;
+
   const mig = c.migration_level || "medium";
   const badge = $("migBadge");
   badge.textContent = mig.toUpperCase();
@@ -138,10 +173,62 @@ function showConditions(c) {
   const bar = $("skyBar");
   bar.style.width = `${sd}%`;
   bar.className = sd >= 65 ? "bad" : sd >= 35 ? "" : "good";
-  document.querySelectorAll(".segmented button").forEach((b) => b.classList.toggle("active", b.dataset.s === (c.scenario || "live")));
+}
+
+function askForLocation(prefill = "") {
+  hasForecast = false;
+  $("condSummary").textContent = "Where is this building?";
+  $("skyEyebrow").textContent = "Step 1 · Tonight's sky";
+  $("whereForm").hidden = false;
+  $("whereLine").hidden = true;
+  $("sourceLine").hidden = true;
+  $("condTiles").hidden = true;
+  $("nextBtn").disabled = true;
+  $("whereError").hidden = true;
+  $("whereInput").value = prefill;
+}
+
+async function submitLocation(ev) {
+  ev.preventDefault();
+  const address = $("whereInput").value.trim();
+  if (!address) return;
+  const btn = $("whereBtn");
+  btn.disabled = true;
+  btn.textContent = "Finding it…";
+  $("whereError").hidden = true;
+  try {
+    const r = await fetch(LO.url("/api/location"), {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ address, building: building && building.building }),
+    });
+    const body = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(body.detail || `HTTP ${r.status}`);
+    building = { ...building, location: body.location };
+    applyBuilding(building);
+    showConditions(body.conditions);
+    setRiskNow(body.risk);
+  } catch (e) {
+    $("whereError").textContent = e.message;
+    $("whereError").hidden = false;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Get tonight's forecast";
+  }
+}
+
+// Forecast for the current building, or the address prompt if it has none yet.
+async function loadForecast(b) {
+  if (!LO.fake && !(b && b.location)) { askForLocation(); return; }
+  try { showConditions(await LO.api().conditions()); }
+  catch (e) { askForLocation(b && b.location ? b.location.address : ""); toast(`Couldn't load the forecast: ${e.message}`); }
 }
 
 function setRiskNow(r) {
+  if (typeof r !== "number") {
+    $("riskNow").textContent = "–";
+    $("riskNowBar").style.width = "0";
+    return;
+  }
   const s = score(r);
   $("riskNow").textContent = `${s} / 100`;
   const bar = $("riskNowBar");
@@ -158,18 +245,10 @@ async function refreshRisk() {
   } catch (e) { /* keep the old numbers */ }
 }
 
-async function simulate(name) {
-  try {
-    const c = await LO.api().simulate(name);
-    showConditions(c);
-    await refreshRisk();
-    toast(name === "live" ? "Back to tonight's real weather" : `Simulating a ${name === "clear" ? "clear, calm" : "foggy migration"} night`);
-  } catch (e) { toast(`Could not switch scenario: ${e.message}`); }
-}
-
 // ---------------------------------------------------------------- step 2: decide
 async function decide() {
   if (deciding) return;
+  if (!hasForecast) { toast("Add the building's address first (step 1)."); goTo(1); return; }
   deciding = true;
   const btn = $("decideBtn");
   btn.classList.add("busy");
@@ -291,10 +370,10 @@ function tickClock() {
 // ---------------------------------------------------------------- loading + live updates
 async function loadAll() {
   const api = LO.api();
-  const [b, c] = await Promise.all([api.windows(), api.conditions()]);
+  const b = await api.windows();
   building = null; // force a rebuild for a fresh load
   applyBuilding(b);
-  showConditions(c);
+  await loadForecast(b);
   fillBuildings(await api.buildings().catch(() => null), b.building);
 }
 
@@ -303,7 +382,7 @@ function connectLive() {
     status: (ok) => { if (!LO.fake) setStatus(ok ? "live" : "off", ok ? "Live" : "Offline · retrying"); },
     building: (msg) => { if (!LO.fake && !deciding) applyBuilding(msg); },
     command: (msg) => { if (!LO.fake) view.setWindow(msg.id, msg.state); },
-    conditions: (msg) => { if (!LO.fake) { showConditions(msg); refreshRisk(); } },
+    conditions: (msg) => { if (!LO.fake && msg.location) { showConditions(msg); refreshRisk(); } },
     decision: (msg) => {
       // A decision started somewhere else (classic page, API docs): show it here too.
       if (LO.fake || deciding) return;
@@ -331,19 +410,16 @@ async function buildingAdded(b) {
   applyBuilding(b, { rise: true });
   view.setBirdMode("attracted");
   if (b.conditions) showConditions(b.conditions);
+  else askForLocation();
   fillBuildings(await LO.api().buildings().catch(() => null), b.building);
   goTo(1);
-  const loc = b.location || {};
   const how = b.lights === "simulated" ? "lights simulated from a day photo" : "lit windows found in the photo";
-  toast(loc.found === false
-    ? `Couldn't find that address, so we're using Buffalo's weather. ${b.floors} floors × ${b.cols} windows.`
-    : `${b.building}: ${b.floors} floors × ${b.cols} windows · ${how}`, 5000);
+  toast(`${b.building}: ${b.floors} floors × ${b.cols} windows · ${how}`, 5000);
 }
 
 // ---------------------------------------------------------------- wire up
 function wire() {
   document.querySelectorAll("[data-go]").forEach((b) => b.addEventListener("click", () => goTo(+b.dataset.go)));
-  document.querySelectorAll(".segmented button").forEach((b) => b.addEventListener("click", () => simulate(b.dataset.s)));
   $("decideBtn").addEventListener("click", decide);
   $("startOver").addEventListener("click", startOver);
   $("replayBtn").addEventListener("click", () => lastDecision && speak(lastDecision.reason));
@@ -353,13 +429,15 @@ function wire() {
     $("legendRisk").classList.toggle("hidden", !e.target.checked);
   });
   $("debugToggle").addEventListener("change", showPhoto);
+  $("whereForm").addEventListener("submit", submitLocation);
+  $("whereChange").addEventListener("click", () => askForLocation(building && building.location ? building.location.address : ""));
   $("slider").addEventListener("input", (e) => setSlider(e.target.value));
   $("buildingSelect").addEventListener("change", async (e) => {
     try {
       const b = await LO.api().select(e.target.value);
       lastDecision = null;
       applyBuilding(b, { rise: true });
-      showConditions(await LO.api().conditions());
+      await loadForecast(b);
       await refreshRisk();
       goTo(1);
     }

@@ -25,7 +25,7 @@ class Window(BaseModel):
 
 class Conditions(BaseModel):
     time: str
-    location: str = "Buffalo, NY"
+    location: str = ""
     summary: str = ""
     sky_cover: int = Field(default=0, ge=0, le=100)  # percent
     fog: bool = False
@@ -36,6 +36,9 @@ class Conditions(BaseModel):
     migration_estimated: bool = True
     sky_danger: float = Field(default=0.5, ge=0, le=1)
     scenario: str = "live"  # "live", "clear" or "foggy_migration"
+    source: str = ""        # where the forecast came from, e.g. "U.S. National Weather Service"
+    source_url: str = ""    # human-readable forecast page for that location
+    updated: str = ""       # when the source last updated the forecast (ISO time)
 
 
 class Command(BaseModel):
@@ -70,6 +73,11 @@ class Decision(BaseModel):
 
 class SimulateRequest(BaseModel):
     scenario: Literal["live", "clear", "foggy_migration"]
+
+
+class LocationRequest(BaseModel):
+    address: str
+    building: Optional[str] = None  # default: the current building
 
 
 class AlertRequest(BaseModel):

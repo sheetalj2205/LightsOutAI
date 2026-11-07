@@ -11,11 +11,17 @@ def test_full_loop(monkeypatch):
     monkeypatch.setattr(config, "GEMINI_API_KEY", "")
     with TestClient(app) as client:
         assert client.get("/api/health").json()["ok"]
+        # No address yet: no forecast, and the AI won't decide.
+        assert client.get("/api/conditions").status_code == 409
+        assert client.post("/api/decide", json={}).status_code == 409
+        loc = client.post("/api/location", json={"address": "1 Test St, Testville"}).json()
+        assert loc["location"]["place"] == "Testville, IL"
         cond = client.get("/api/conditions").json()
         assert cond["migration_level"] in ("low", "medium", "high")
+        assert cond["source"] == "Test forecast" and cond["source_url"] and cond["location"]
 
         r = client.post("/api/analyze", files={"photo": ("p.jpg", make_demo_photo(3), "image/jpeg")},
-                        data={"building": "Test Hall", "threshold": "150"})
+                        data={"building": "Test Hall", "threshold": "150", "address": "2 Test Ave, Testville"})
         assert r.status_code == 200, r.text
         body = r.json()
         assert body["windows"] and set(body["windows"][0]) >= {

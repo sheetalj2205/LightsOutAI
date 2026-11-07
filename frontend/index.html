@@ -17,7 +17,7 @@
       <span class="logo" aria-hidden="true">🐦</span>
       <div>
         <div class="name">Lights Out AI</div>
-        <div class="tagline">Turning off the lights that kill migrating birds · Buffalo, NY</div>
+        <div class="tagline">Turning off the lights that kill migrating birds</div>
       </div>
     </div>
     <div class="topbar-right">
@@ -70,9 +70,23 @@
       <!-- Step 1 -->
       <div class="pane" data-step="1">
         <div class="eyebrow" id="skyEyebrow">Step 1 · Tonight's sky</div>
-        <h2 id="condSummary">Loading tonight's weather…</h2>
+        <h2 id="condSummary">Loading tonight's forecast…</h2>
+
+        <form class="where-form" id="whereForm" hidden>
+          <label class="field"><span>📍 Address</span>
+            <input id="whereInput" type="text" maxlength="160" placeholder="Street address, city, state" required /></label>
+          <p class="form-error" id="whereError" hidden></p>
+          <button type="submit" class="btn primary" id="whereBtn">Get tonight's forecast</button>
+        </form>
+
+        <div class="where-line" id="whereLine" hidden>
+          <span>📍 <b id="wherePlace"></b></span>
+          <button type="button" class="link" id="whereChange">change</button>
+        </div>
+        <p class="source-line" id="sourceLine" hidden></p>
+
         <p class="explain">Birds migrate at night. Fog and low clouds push them lower, where lit windows pull them in.</p>
-        <div class="tiles">
+        <div class="tiles" id="condTiles">
           <div class="tile">
             <div class="label">Migration</div>
             <div class="badge" id="migBadge">…</div>
@@ -89,13 +103,7 @@
             <div class="bar"><span id="riskNowBar"></span></div>
           </div>
         </div>
-        <div class="label space">Simulate a night</div>
-        <div class="segmented" role="group" aria-label="Scenario">
-          <button type="button" data-s="live">Live weather</button>
-          <button type="button" data-s="clear">Clear</button>
-          <button type="button" data-s="foggy_migration">Foggy migration</button>
-        </div>
-        <button type="button" class="btn primary wide" data-go="2">Next: let the AI decide →</button>
+        <button type="button" class="btn primary wide" data-go="2" id="nextBtn">Next: let the AI decide →</button>
       </div>
 
       <!-- Step 2 -->
@@ -179,8 +187,8 @@
           <label class="field"><span>Building name</span>
             <input id="addName" type="text" maxlength="60" placeholder="e.g. Davis Hall" required /></label>
           <label class="field"><span>Address</span>
-            <input id="addAddress" type="text" maxlength="160" placeholder="e.g. 12 Capen Hall, Buffalo, NY" /></label>
-          <p class="hint">We use the address for that place's real weather tonight.</p>
+            <input id="addAddress" type="text" maxlength="160" placeholder="Street address, city, state" required /></label>
+          <p class="hint">We read tonight's real forecast for this address.</p>
           <details class="manual" id="addManual">
             <summary>Floors and windows (optional)</summary>
             <div class="manual-row">

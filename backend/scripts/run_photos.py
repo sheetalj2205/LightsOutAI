@@ -5,7 +5,8 @@
        .venv/bin/python scripts/run_photos.py tune --thresholds 160 180 200 220
 
 2) Save the best photo of a building for the demo (loaded automatically on server start):
-       .venv/bin/python scripts/run_photos.py save "Davis Hall" ../photos/davis_1910.jpg --threshold 190
+       .venv/bin/python scripts/run_photos.py save "Davis Hall" ../photos/davis_1910.jpg --threshold 190 \
+           --address "Davis Hall, Buffalo, NY"
 
    Grid fallback instead of auto-detection (4 facade corners TL,TR,BR,BL in pixels):
        .venv/bin/python scripts/run_photos.py save "Capen Hall" ../photos/capen.jpg \
@@ -21,7 +22,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from app import config, detection, risk, scenarios  # noqa: E402
+from app import config, detection, geo, risk, scenarios  # noqa: E402
 
 EXTS = {".jpg", ".jpeg", ".png"}
 
@@ -35,27 +36,32 @@ def tune(thresholds: list[int]) -> None:
     if not photos:
         print(f"No JPG/PNG photos in {config.PHOTOS_DIR}")
         return
-    cond = scenarios.current_conditions()
     print(f"{'photo':40} " + " ".join(f"t={t:<5}" for t in thresholds) + "  (windows found)")
     for p in photos:
         img = detection.load_image(p.read_bytes())
         counts = []
         for t in thresholds:
-            wins = risk.score_windows(detection.detect_windows(img, t), cond)
+            wins = detection.detect_windows(img, t)
             counts.append(len(wins))
             detection.save_debug_image(img, wins, config.OUTPUT_DIR / "tuning" / f"{p.stem}_t{t}.jpg")
         print(f"{p.name[:40]:40} " + " ".join(f"{c:<7}" for c in counts))
     print(f"\nOpen {config.OUTPUT_DIR / 'tuning'} and pick the threshold whose boxes match the lit windows best.")
 
 
-def save(name: str, photo: Path, threshold: int, corners, floors, cols) -> None:
+def save(name: str, photo: Path, threshold: int, corners, floors, cols, address=None) -> None:
     data = photo.read_bytes()
     img = detection.load_image(data)
     if corners:
         wins = detection.detect_grid(img, json.loads(corners), floors, cols)
     else:
         wins = detection.detect_windows(img, threshold)
-    wins = risk.score_windows(wins, scenarios.current_conditions())
+    location = None
+    if address:
+        hit = geo.geocode(address)
+        if not hit:
+            sys.exit(f"Couldn't find the address {address!r}. Try adding the city and state.")
+        location = {"address": address} | hit
+        wins = risk.score_windows(wins, scenarios.current_conditions(location))
     folder = config.OUTPUT_DIR / slug(name)
     folder.mkdir(parents=True, exist_ok=True)
     (folder / "photo.jpg").write_bytes(data)
@@ -63,6 +69,7 @@ def save(name: str, photo: Path, threshold: int, corners, floors, cols) -> None:
     (folder / "result.json").write_text(json.dumps({
         "building": name, "source_photo": photo.name, "threshold": threshold,
         "corners": json.loads(corners) if corners else None, "floors": floors, "cols": cols,
+        "location": location,
         "windows": [w.model_dump() for w in wins],
     }, indent=1))
     print(f"Saved {len(wins)} windows for {name} -> {folder}")
@@ -80,8 +87,9 @@ if __name__ == "__main__":
     s.add_argument("--corners")
     s.add_argument("--floors", type=int)
     s.add_argument("--cols", type=int)
+    s.add_argument("--address", help='e.g. "Davis Hall, Buffalo, NY" (used for its local forecast)')
     a = ap.parse_args()
     if a.cmd == "tune":
         tune(a.thresholds)
     else:
-        save(a.name, a.photo, a.threshold, a.corners, a.floors, a.cols)
+        save(a.name, a.photo, a.threshold, a.corners, a.floors, a.cols, a.address)

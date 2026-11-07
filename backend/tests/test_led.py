@@ -33,9 +33,12 @@ def test_led_board_over_websocket():
             assert frame["type"] == "frame" and len(frame["states"]) == 12
             assert json.loads(page.receive_text())["type"] == "building"  # pages unchanged
             assert client.get("/api/health").json()["led_boards"] == 1
+            client.post("/api/location", json={"address": "1 Test St, Testville"})
             client.post("/api/simulate", json={"scenario": "foggy_migration"})
             client.post("/api/decide", json={})
             msg = json.loads(board.receive_text())
+            while msg.get("type") == "frame":  # setting the location redraws the building first
+                msg = json.loads(board.receive_text())
             assert set(msg) == {"led", "state"} and 0 <= msg["led"] < 12
             board.send_text(json.dumps(msg | {"ok": True}))
         client.post("/api/reset")

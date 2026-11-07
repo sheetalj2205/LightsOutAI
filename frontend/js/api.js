@@ -91,8 +91,9 @@
   const fakeState = { scenario: "live", building: null, original: null, decision: {} };
 
   function fakeConditions() {
-    return Object.assign({ time: new Date().toISOString().slice(0, 16), location: "Buffalo, NY",
-                           migration_estimated: true, scenario: fakeState.scenario },
+    return Object.assign({ time: new Date().toISOString().slice(0, 16), location: "Offline demo",
+                           migration_estimated: true, scenario: fakeState.scenario,
+                           source: "Built-in demo data (offline, not a real forecast)", source_url: "", updated: "" },
                          PRESETS[fakeState.scenario]);
   }
   const stateFactor = { on: 1, dim: 0.35, off: 0 };
@@ -148,9 +149,9 @@
           return fy.floor - fx.floor || fx.col - fy.col;
         }),
         risk_before: before, risk_after: after, source: "fallback", conditions: cond,
-        reason: `${cond.migration_level[0].toUpperCase() + cond.migration_level.slice(1)} migration tonight over Buffalo. ` +
+        reason: `${cond.migration_level[0].toUpperCase() + cond.migration_level.slice(1)} migration tonight. ` +
                 `I turned off ${offs} windows and dimmed ${actions.length - offs} on floors ${floorsHit[0]} to ${floorsHit[floorsHit.length - 1]}. The lobby stays on.`,
-        windows: b.windows, energy_saved_kwh: kwh, money_saved_usd: +(kwh * 0.2).toFixed(2),
+        windows: b.windows, energy_saved_kwh: kwh, money_saved_usd: +(kwh * 0.17).toFixed(2),
         photo_url: "", after_url: "",
       };
       return fakeState.decision;

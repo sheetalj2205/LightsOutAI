@@ -1,21 +1,21 @@
 """Real weather + migration module for Lights Out AI.
- 
-Gets tonight's hourly forecast for Buffalo from the National Weather Service
-(api.weather.gov, free, no key) and estimates bird migration level and sky danger.
- 
-Contract: get_conditions() returns a dict with these keys (see models.Conditions):
+
+Gets tonight's hourly forecast for the building's own location:
+  - U.S. National Weather Service (api.weather.gov) for US addresses (free, no key)
+  - Open-Meteo (open-meteo.com) everywhere else, or if the NWS is down (free, no key)
+and estimates bird migration level and sky danger from it. There is no default location.
+
+Contract: get_conditions(lat, lon, place) returns a dict with these keys (see models.Conditions):
     time, location, summary, sky_cover (0-100), fog, rain, wind_dir, wind_speed_mph,
-    migration_level ("low"/"medium"/"high"), migration_estimated (True), sky_danger (0-1)
- 
-If the NWS API fails, it returns safe fallback values so the demo never breaks.
+    migration_level ("low"/"medium"/"high"), migration_estimated (True), sky_danger (0-1),
+    source, source_url, updated
+If no forecast can be reached, it returns neutral values clearly labelled "No forecast available".
 """
 import json
 import re
 import urllib.request
 from datetime import datetime, timezone
  
-# UB North Campus, Buffalo NY
-LAT, LON = 43.0008, -78.7890
  
 # NWS asks every client to send a User-Agent
 HEADERS = {"User-Agent": "LightsOutAI-UBHacking (student project)",
@@ -24,22 +24,26 @@ HEADERS = {"User-Agent": "LightsOutAI-UBHacking (student project)",
 RAIN_WORDS = ("rain", "drizzle", "showers", "snow", "storm", "sleet")
  
  
-def _fallback(place: str = "Buffalo, NY") -> dict:
+def _fallback(place: str) -> dict:
+    """No forecast reachable: neutral values, clearly labelled as such."""
     return {
         "time": datetime.now().isoformat(timespec="minutes"),
         "location": place,
-        "summary": "Weather unavailable, using default night (fallback)",
+        "summary": "Forecast unavailable right now (neutral estimate)",
         "sky_cover": 50,
         "fog": False,
         "rain": False,
-        "wind_dir": "NW",
-        "wind_speed_mph": 10,
+        "wind_dir": "",
+        "wind_speed_mph": 0,
         "migration_level": "medium",
         "migration_estimated": True,
         "sky_danger": 0.5,
+        "source": "No forecast available",
+        "source_url": "",
+        "updated": "",
     }
- 
- 
+
+
 def _get(url: str) -> dict:
     req = urllib.request.Request(url, headers=HEADERS)
     with urllib.request.urlopen(req, timeout=10) as r:
@@ -179,7 +183,11 @@ def _open_meteo(lat: float, lon: float, place: str) -> dict:
             break
     if not hours:
         return _fallback(place)
-    return _summarize(hours, place)
+    return _summarize(hours, place) | {
+        "source": "Open-Meteo",
+        "source_url": f"https://open-meteo.com/en/docs#latitude={lat:.4f}&longitude={lon:.4f}",
+        "updated": datetime.now(timezone.utc).isoformat(timespec="minutes"),
+    }
 
 
 def _summarize(hours: list, place: str) -> dict:
@@ -203,11 +211,12 @@ def _summarize(hours: list, place: str) -> dict:
     }
 
 
-def get_conditions(lat: float = LAT, lon: float = LON, place: str = "Buffalo, NY") -> dict:
-    """Tonight's conditions at any US location (Buffalo by default)."""
+def get_conditions(lat: float, lon: float, place: str) -> dict:
+    """Tonight's conditions at the given location: NWS in the US, Open-Meteo elsewhere."""
     try:
         point = _get(f"https://api.weather.gov/points/{lat:.4f},{lon:.4f}")["properties"]
-        periods = _get(point["forecastHourly"])["properties"]["periods"]
+        hourly = _get(point["forecastHourly"])["properties"]
+        periods = hourly["periods"]
         cover_map = _sky_cover_map(point["forecastGridData"])
     except Exception:
         return _open_meteo(lat, lon, place)  # outside the US, or NWS is down
@@ -237,9 +246,15 @@ def get_conditions(lat: float = LAT, lon: float = LON, place: str = "Buffalo, NY
             "danger": _sky_danger(summary, cover),
         })
  
-    return _summarize(hours, place)
+    office = point.get("gridId", "")
+    return _summarize(hours, place) | {
+        "source": "U.S. National Weather Service" + (f" · {office} office" if office else ""),
+        "source_url": f"https://forecast.weather.gov/MapClick.php?lat={lat:.4f}&lon={lon:.4f}",
+        "updated": hourly.get("updateTime") or hourly.get("generatedAt") or "",
+    }
 
 
 if __name__ == "__main__":
-    print(json.dumps(get_conditions(), indent=2))
+    import sys  # usage: python -m app.weather <lat> <lon> "<place>"
+    print(json.dumps(get_conditions(float(sys.argv[1]), float(sys.argv[2]), sys.argv[3]), indent=2))
  

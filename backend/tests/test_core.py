@@ -91,6 +91,14 @@ def test_weather_is_cached(monkeypatch):
     from app import scenarios, weather
     calls = []
     monkeypatch.setattr(weather, "get_conditions", lambda *a, **k: calls.append(1) or {"summary": "Clear", "sky_danger": 0.1})
+    loc = {"lat": 1.0, "lon": 2.0, "place": "X"}
     for _ in range(5):
-        scenarios.current_conditions()
+        scenarios.current_conditions(loc)
     assert len(calls) == 1
+
+
+def test_no_location_means_no_forecast():
+    import pytest
+    from app import scenarios
+    with pytest.raises(scenarios.NoLocation):
+        scenarios.current_conditions(None)
