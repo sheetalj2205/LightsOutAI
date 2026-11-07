@@ -243,13 +243,100 @@ export function createScene(container) {
 
   let rise = null; // {start, ms} while a new building grows out of the ground
 
+  // Plaza, trees and street lamps around a building footprint of w x d.
+  function addGrounds(group, w, d) {
+    const m = new THREE.Matrix4();
+    const plaza = new THREE.Mesh(new THREE.CircleGeometry(Math.max(w, d) * 0.6 + 2.6, 48),
+      new THREE.MeshStandardMaterial({ color: 0x3a4060, roughness: 0.95 }));
+    plaza.rotation.x = -Math.PI / 2;
+    plaza.position.y = 0.01;
+    plaza.receiveShadow = true;
+    group.add(plaza);
+    const rt = rng(3);
+    const trunkGeo = new THREE.CylinderGeometry(0.08, 0.12, 0.8, 6);
+    const crownGeo = new THREE.ConeGeometry(0.75, 1.9, 7);
+    const trunkMat = new THREE.MeshStandardMaterial({ color: 0x3a2f2a });
+    const crownMat = new THREE.MeshStandardMaterial({ color: 0x24493f, roughness: 0.9 });
+    const nTrees = 26;
+    const trunks = new THREE.InstancedMesh(trunkGeo, trunkMat, nTrees);
+    const crowns = new THREE.InstancedMesh(crownGeo, crownMat, nTrees);
+    const ringR = Math.max(w, d) * 0.9 + 4;
+    for (let t = 0; t < nTrees; t++) {
+      let a = (t / nTrees) * Math.PI * 2 + rt() * 0.2;
+      if (Math.abs(Math.atan2(Math.sin(a - Math.PI / 2), Math.cos(a - Math.PI / 2))) < 0.35) a += 0.7; // keep the entrance path clear
+      const r = ringR + rt() * 6;
+      const sc = 0.8 + rt() * 0.6;
+      const x = Math.cos(a) * r, z = Math.sin(a) * r;
+      trunks.setMatrixAt(t, m.compose(new THREE.Vector3(x, 0.4 * sc, z), new THREE.Quaternion(), new THREE.Vector3(sc, sc, sc)));
+      crowns.setMatrixAt(t, m.compose(new THREE.Vector3(x, (0.8 + 0.95) * sc, z), new THREE.Quaternion(), new THREE.Vector3(sc, sc, sc)));
+    }
+    trunks.castShadow = crowns.castShadow = true;
+    group.add(trunks, crowns);
+
+    lampGlows = [];
+    const lampMat = new THREE.MeshStandardMaterial({ color: 0x2b2f40 });
+    const glowMap = glowTexture("rgba(255,214,150,1)", "rgba(255,200,120,0)");
+    const lampR = Math.max(w, d) * 0.6 + 2.2;
+    for (let l = 0; l < 6; l++) {
+      const a = (l / 6) * Math.PI * 2 + Math.PI / 6;
+      const x = Math.cos(a) * lampR, z = Math.sin(a) * lampR;
+      const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.05, 1.8, 6), lampMat);
+      pole.position.set(x, 0.9, z);
+      group.add(pole);
+      const glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowMap, depthWrite: false, blending: THREE.AdditiveBlending }));
+      glow.position.set(x, 1.85, z);
+      glow.scale.setScalar(0.75);
+      group.add(glow);
+      lampGlows.push(glow);
+    }
+
+  }
+
+  function disposeBuilding() {
+    if (!building) return;
+    scene.remove(building);
+    building.traverse((o) => { o.geometry?.dispose(); if (o.material && o.material !== birdMat) o.material.dispose?.(); });
+    building = null;
+    winMesh = haloMesh = aviation = null;
+    scanMeshes = [];
+    lampGlows = [];
+    slots.clear();
+    cur = []; tgt = [];
+  }
+
+  // Empty plot waiting for a building: dashed outline, trees, lamps; birds pass by safely.
+  function setEmpty() {
+    disposeBuilding();
+    rise = null;
+    building = new THREE.Group();
+    const w = 8, d = 4.2;
+    dims = { w, h: 7, d, floors: 5, cols: 7 };
+    const pts = [[-w / 2, -d / 2], [w / 2, -d / 2], [w / 2, d / 2], [-w / 2, d / 2], [-w / 2, -d / 2]]
+      .map(([x, z]) => new THREE.Vector3(x, 0.06, z));
+    const outline = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts),
+      new THREE.LineDashedMaterial({ color: 0xc9ccff, dashSize: 0.45, gapSize: 0.3 }));
+    outline.computeLineDistances();
+    building.add(outline);
+    const post = new THREE.ConeGeometry(0.12, 0.5, 8);
+    const postMat = new THREE.MeshStandardMaterial({ color: 0xffb648, emissive: 0x7a4a00 });
+    for (const p of pts.slice(0, 4)) {
+      const c = new THREE.Mesh(post, postMat);
+      c.position.set(p.x, 0.25, p.z);
+      building.add(c);
+    }
+    addGrounds(building, w, d);
+    scene.add(building);
+    fitCamera();
+    birdMode = "safe";
+    busyFocus = false;
+    if (!userDragging) controls.autoRotate = true;
+  }
+
+
   function setBuilding({ floors, cols, windows }, opts = {}) {
     floors = Math.max(1, floors || Math.max(1, ...windows.map((w) => w.floor)));
     cols = Math.max(1, cols || Math.max(1, ...windows.map((w) => w.col)));
-    if (building) {
-      scene.remove(building);
-      building.traverse((o) => { o.geometry?.dispose(); if (o.material && o.material !== birdMat) o.material.dispose?.(); });
-    }
+    disposeBuilding();
     building = new THREE.Group();
     const w = cols * CELL_W + 0.9, h = floors * CELL_H + 0.45, d = Math.max(3.4, cols * 0.45);
     dims = { w, h, d, floors, cols };
@@ -362,50 +449,7 @@ export function createScene(container) {
       scanMeshes.push(sm);
     }
 
-    // Plaza, trees and street lamps around the building.
-    const plaza = new THREE.Mesh(new THREE.CircleGeometry(Math.max(w, d) * 0.6 + 2.6, 48),
-      new THREE.MeshStandardMaterial({ color: 0x3a4060, roughness: 0.95 }));
-    plaza.rotation.x = -Math.PI / 2;
-    plaza.position.y = 0.01;
-    plaza.receiveShadow = true;
-    building.add(plaza);
-    const rt = rng(3);
-    const trunkGeo = new THREE.CylinderGeometry(0.08, 0.12, 0.8, 6);
-    const crownGeo = new THREE.ConeGeometry(0.75, 1.9, 7);
-    const trunkMat = new THREE.MeshStandardMaterial({ color: 0x3a2f2a });
-    const crownMat = new THREE.MeshStandardMaterial({ color: 0x24493f, roughness: 0.9 });
-    const nTrees = 26;
-    const trunks = new THREE.InstancedMesh(trunkGeo, trunkMat, nTrees);
-    const crowns = new THREE.InstancedMesh(crownGeo, crownMat, nTrees);
-    const ringR = Math.max(w, d) * 0.9 + 4;
-    for (let t = 0; t < nTrees; t++) {
-      let a = (t / nTrees) * Math.PI * 2 + rt() * 0.2;
-      if (Math.abs(Math.atan2(Math.sin(a - Math.PI / 2), Math.cos(a - Math.PI / 2))) < 0.35) a += 0.7; // keep the entrance path clear
-      const r = ringR + rt() * 6;
-      const sc = 0.8 + rt() * 0.6;
-      const x = Math.cos(a) * r, z = Math.sin(a) * r;
-      trunks.setMatrixAt(t, m.compose(new THREE.Vector3(x, 0.4 * sc, z), new THREE.Quaternion(), new THREE.Vector3(sc, sc, sc)));
-      crowns.setMatrixAt(t, m.compose(new THREE.Vector3(x, (0.8 + 0.95) * sc, z), new THREE.Quaternion(), new THREE.Vector3(sc, sc, sc)));
-    }
-    trunks.castShadow = crowns.castShadow = true;
-    building.add(trunks, crowns);
-
-    lampGlows = [];
-    const lampMat = new THREE.MeshStandardMaterial({ color: 0x2b2f40 });
-    const glowMap = glowTexture("rgba(255,214,150,1)", "rgba(255,200,120,0)");
-    const lampR = Math.max(w, d) * 0.6 + 2.2;
-    for (let l = 0; l < 6; l++) {
-      const a = (l / 6) * Math.PI * 2 + Math.PI / 6;
-      const x = Math.cos(a) * lampR, z = Math.sin(a) * lampR;
-      const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.05, 1.8, 6), lampMat);
-      pole.position.set(x, 0.9, z);
-      building.add(pole);
-      const glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowMap, depthWrite: false, blending: THREE.AdditiveBlending }));
-      glow.position.set(x, 1.85, z);
-      glow.scale.setScalar(0.75);
-      building.add(glow);
-      lampGlows.push(glow);
-    }
+    addGrounds(building, w, d);
 
     scene.add(building);
     refreshTargets();
@@ -605,7 +649,7 @@ export function createScene(container) {
   frame();
 
   return {
-    setBuilding, setWindow, setWindows, setRiskView, setBirdMode, thinking,
+    setBuilding, setEmpty, setWindow, setWindows, setRiskView, setBirdMode, thinking,
     dispose() {
       cancelAnimationFrame(raf);
       ro.disconnect();

@@ -5,33 +5,53 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Lights Out AI</title>
   <meta name="description" content="Turning off the building lights that kill migrating birds." />
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🐦</text></svg>" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='9' fill='%234b4fe0'/%3E%3Cpath d='M8 19c2.2-1.6 4-1.6 5.6.6 1.6-2.2 3.4-2.2 5.6-.6' stroke='white' stroke-width='2' fill='none' stroke-linecap='round'/%3E%3Ccircle cx='22' cy='10' r='3.2' fill='%23ffd27a'/%3E%3C/svg%3E" />
   <link rel="stylesheet" href="css/story.css" />
   <script type="importmap">
     { "imports": { "three": "./vendor/three/three.module.js", "three/addons/": "./vendor/three/addons/" } }
   </script>
 </head>
 <body>
+  <!-- Line icons (drawn once, used with <use>) -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <defs>
+      <symbol id="i-camera" viewBox="0 0 24 24"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></symbol>
+      <symbol id="i-pin" viewBox="0 0 24 24"><path d="M12 21s-7-6.2-7-11.5a7 7 0 0 1 14 0C19 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></symbol>
+      <symbol id="i-spark" viewBox="0 0 24 24"><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"/><path d="M19 16l.8 2.2L22 19l-2.2.8L19 22l-.8-2.2L16 19l2.2-.8z"/></symbol>
+      <symbol id="i-chart" viewBox="0 0 24 24"><path d="M4 20V11M10 20V5M16 20v-6M2 20h20"/></symbol>
+      <symbol id="i-upload" viewBox="0 0 24 24"><path d="M12 15V4M7.5 8.5 12 4l4.5 4.5M4 15v4h16v-4"/></symbol>
+      <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+      <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></symbol>
+      <symbol id="i-sound" viewBox="0 0 24 24"><path d="M4 9h4l5-4v14l-5-4H4z"/><path d="M16.5 8.5a5 5 0 0 1 0 7M19 6a8.5 8.5 0 0 1 0 12"/></symbol>
+      <symbol id="i-redo" viewBox="0 0 24 24"><path d="M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7"/></symbol>
+      <symbol id="i-building" viewBox="0 0 24 24"><path d="M5 21V4h10v17M15 9h4v12M3 21h18M8 8h1M11 8h1M8 12h1M11 12h1M8 16h1M11 16h1"/></symbol>
+    </defs>
+  </svg>
+
   <header class="topbar">
     <div class="brand">
-      <span class="logo" aria-hidden="true">🐦</span>
+      <svg class="logo" viewBox="0 0 40 40" aria-hidden="true">
+        <rect width="40" height="40" rx="12" fill="#4b4fe0"/>
+        <circle cx="27.5" cy="12.5" r="4.5" fill="#ffd27a"/>
+        <path d="M9 24c2.8-2 5.2-2 7.2.8 2-2.8 4.4-2.8 7.2-.8" stroke="#fff" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
       <div>
         <div class="name">Lights Out AI</div>
         <div class="tagline">Turning off the lights that kill migrating birds</div>
       </div>
     </div>
     <div class="topbar-right">
-      <button type="button" class="btn add-btn" id="addBtn">＋ Add building</button>
-      <label class="building-pick">
+      <label class="building-pick hidden">
         <span class="sr">Building</span>
         <select id="buildingSelect"></select>
       </label>
+      <button type="button" class="btn small soft" id="newBtn"><svg class="ic"><use href="#i-plus"/></svg>New building</button>
       <span class="status" id="status"><i></i><b id="statusText">Connecting…</b></span>
-      <span class="clock" id="clock"></span>
       <details class="menu">
         <summary aria-label="More">⋯</summary>
         <div class="menu-body">
-          <button type="button" id="fakeBtn">Fake mode: off</button>
+          <button type="button" id="sampleMenuBtn">Try a sample building</button>
+          <button type="button" id="fakeBtn">Offline demo data: off</button>
           <a href="twin.html" target="_blank">Open twin screen ↗</a>
           <a href="classic.html">Classic dashboard</a>
           <a id="docsLink" href="/docs" target="_blank">API docs ↗</a>
@@ -40,23 +60,36 @@
     </div>
   </header>
 
-  <nav class="steps" aria-label="Demo steps">
-    <button type="button" class="step" data-go="1"><span class="num">1</span><span><b>Tonight's sky</b><small>How risky is tonight for birds?</small></span></button>
-    <span class="step-line"></span>
-    <button type="button" class="step" data-go="2"><span class="num">2</span><span><b>AI decides</b><small>Which windows go dark</small></span></button>
-    <span class="step-line"></span>
-    <button type="button" class="step" data-go="3"><span class="num">3</span><span><b>Impact</b><small>Risk, energy and money saved</small></span></button>
+  <nav class="steps" aria-label="Steps">
+    <button type="button" class="step" data-go="1"><span class="num">1</span><span><b>Photo</b><small>Your building</small></span></button>
+    <span class="step-line"><i></i></span>
+    <button type="button" class="step" data-go="2"><span class="num">2</span><span><b>Location</b><small>Tonight's forecast</small></span></button>
+    <span class="step-line"><i></i></span>
+    <button type="button" class="step" data-go="3"><span class="num">3</span><span><b>AI decides</b><small>Which lights go out</small></span></button>
+    <span class="step-line"><i></i></span>
+    <button type="button" class="step" data-go="4"><span class="num">4</span><span><b>Impact</b><small>Risk and savings</small></span></button>
   </nav>
 
   <main class="stage">
     <section class="viewer" aria-label="3D building">
       <div id="scene"></div>
+
+      <div class="empty" id="emptyState">
+        <div class="empty-card">
+          <span class="empty-icon"><svg class="ic lg"><use href="#i-building"/></svg></span>
+          <h2>Start with a photo of your building</h2>
+          <p>Night or day. We find every floor and window, build it in 3D, then decide which lights to turn off tonight.</p>
+          <button type="button" class="btn primary" id="emptyUpload"><svg class="ic"><use href="#i-upload"/></svg>Upload a photo</button>
+          <button type="button" class="link" id="sampleBtn">or try a sample building</button>
+        </div>
+      </div>
+
       <div class="viewer-top">
-        <span class="chip" id="buildingName">Loading…</span>
-        <label class="switch"><input type="checkbox" id="riskToggle" /><span></span>Risk view</label>
+        <span class="chip" id="buildingName" hidden></span>
+        <label class="switch" id="riskSwitch" hidden><input type="checkbox" id="riskToggle" /><span></span>Risk view</label>
       </div>
       <div class="viewer-bottom">
-        <div class="legend" id="legendLight">
+        <div class="legend" id="legendLight" hidden>
           <span><i class="lit"></i>Lit</span><span><i class="dim"></i>Dimmed</span><span><i class="off"></i>Off</span>
         </div>
         <div class="legend hidden" id="legendRisk">
@@ -67,64 +100,110 @@
     </section>
 
     <aside class="card step-card" aria-live="polite">
-      <!-- Step 1 -->
+      <!-- Step 1: photo -->
       <div class="pane" data-step="1">
-        <div class="eyebrow" id="skyEyebrow">Step 1 · Tonight's sky</div>
-        <h2 id="condSummary">Loading tonight's forecast…</h2>
+        <div class="eyebrow"><svg class="ic"><use href="#i-camera"/></svg>Step 1 · Photo</div>
 
-        <form class="where-form" id="whereForm" hidden>
-          <label class="field"><span>📍 Address</span>
-            <input id="whereInput" type="text" maxlength="160" placeholder="Street address, city, state" required /></label>
+        <form id="photoForm" class="pane-stack">
+          <h2>Add a photo of the building</h2>
+          <p class="explain">A straight-on photo of one side works best. Night photos show which lights are really on.</p>
+          <label class="drop" id="drop">
+            <input type="file" id="photoInput" accept="image/*" />
+            <img id="photoPreview" alt="" hidden />
+            <span class="drop-hint" id="dropHint">
+              <svg class="ic xl"><use href="#i-upload"/></svg>
+              <b>Drop a photo or click to choose</b>
+              <small>JPG or PNG · on a phone you can take one now</small>
+            </span>
+          </label>
+          <label class="field"><span>Building name</span>
+            <input id="photoName" type="text" maxlength="60" placeholder="e.g. Davis Hall" /></label>
+          <details class="manual" id="photoManual">
+            <summary>Floors and windows (optional)</summary>
+            <div class="manual-row">
+              <label class="field"><span>Floors</span><input id="photoFloors" type="number" min="1" max="60" placeholder="auto" /></label>
+              <label class="field"><span>Windows per floor</span><input id="photoCols" type="number" min="1" max="40" placeholder="auto" /></label>
+            </div>
+          </details>
+          <p class="form-error" id="photoError" hidden></p>
+          <button type="submit" class="btn primary wide" id="photoBtn">Analyze photo<svg class="ic"><use href="#i-arrow"/></svg></button>
+        </form>
+
+        <ol class="progress" id="photoProgress" hidden>
+          <li><i></i><span>Reading the photo</span></li>
+          <li><i></i><span>Counting floors and windows</span></li>
+          <li><i></i><span>Building it in 3D</span></li>
+        </ol>
+
+        <div class="pane-stack" id="photoResult" hidden>
+          <figure class="result-photo"><img id="resultImg" alt="Photo with the detected windows marked" /></figure>
+          <div>
+            <h2 id="resultName">–</h2>
+            <p class="facts" id="resultFacts">–</p>
+            <span class="pill" id="resultLights">–</span>
+          </div>
+          <button type="button" class="btn primary wide" data-go="2">Continue to location<svg class="ic"><use href="#i-arrow"/></svg></button>
+          <button type="button" class="btn ghost" id="anotherPhoto">Use a different photo</button>
+        </div>
+      </div>
+
+      <!-- Step 2: location + forecast -->
+      <div class="pane" data-step="2">
+        <div class="eyebrow"><svg class="ic"><use href="#i-pin"/></svg>Step 2 · Location</div>
+        <h2 id="condSummary">Where is this building?</h2>
+
+        <form class="where-form" id="whereForm">
+          <label class="field"><span>Address</span>
+            <input id="whereInput" type="text" maxlength="160" placeholder="Street address, city, state" /></label>
           <p class="form-error" id="whereError" hidden></p>
           <button type="submit" class="btn primary" id="whereBtn">Get tonight's forecast</button>
         </form>
 
         <div class="where-line" id="whereLine" hidden>
-          <span>📍 <b id="wherePlace"></b></span>
-          <button type="button" class="link" id="whereChange">change</button>
+          <span><svg class="ic"><use href="#i-pin"/></svg><b id="wherePlace"></b></span>
+          <button type="button" class="link" id="whereChange">Change</button>
         </div>
         <p class="source-line" id="sourceLine" hidden></p>
 
-        <p class="explain">Birds migrate at night. Fog and low clouds push them lower, where lit windows pull them in.</p>
-        <div class="tiles" id="condTiles">
+        <div class="tiles" id="condTiles" hidden>
           <div class="tile">
             <div class="label">Migration</div>
-            <div class="badge" id="migBadge">…</div>
+            <div class="badge" id="migBadge">–</div>
             <div class="hint">estimated from weather</div>
           </div>
           <div class="tile">
             <div class="label">Sky danger</div>
-            <div class="value" id="skyDanger">…</div>
+            <div class="value" id="skyDanger">–</div>
             <div class="bar"><span id="skyBar"></span></div>
           </div>
           <div class="tile">
             <div class="label">Building risk now</div>
-            <div class="value" id="riskNow">…</div>
+            <div class="value" id="riskNow">–</div>
             <div class="bar"><span id="riskNowBar"></span></div>
           </div>
         </div>
-        <button type="button" class="btn primary wide" data-go="2" id="nextBtn">Next: let the AI decide →</button>
+        <p class="explain small">Birds migrate at night. Fog and low clouds push them lower, where lit windows pull them in.</p>
+        <button type="button" class="btn primary wide" data-go="3" id="nextBtn" disabled>Continue<svg class="ic"><use href="#i-arrow"/></svg></button>
       </div>
 
-      <!-- Step 2 -->
-      <div class="pane" data-step="2">
-        <div class="eyebrow">Step 2 · AI decides</div>
-        <h2>Which windows should go dark tonight?</h2>
-        <p class="explain">The AI looks at the real photo, every window's risk and tonight's sky, then picks
-          windows to turn off or dim. The ground-floor lobby always stays on.</p>
-        <button type="button" class="btn primary huge" id="decideBtn">
-          <span class="when-idle">⚡ Let the AI decide</span>
-          <span class="when-busy"><i class="spinner"></i> Thinking…</span>
-        </button>
-        <div class="ai-chain">Gemini → backup BullsAI (UB) → rule-based safety net</div>
-        <button type="button" class="btn ghost" data-go="1">← Back to tonight's sky</button>
-      </div>
-
-      <!-- Step 3 -->
+      <!-- Step 3: AI decides -->
       <div class="pane" data-step="3">
-        <div class="eyebrow">Step 3 · Impact</div>
+        <div class="eyebrow"><svg class="ic"><use href="#i-spark"/></svg>Step 3 · AI decides</div>
+        <h2>Which lights should go out tonight?</h2>
+        <p class="explain">The AI weighs every window's risk against tonight's forecast and picks lights to turn
+          off or dim. The ground-floor lobby always stays on.</p>
+        <button type="button" class="btn primary huge" id="decideBtn">
+          <span class="when-idle"><svg class="ic"><use href="#i-spark"/></svg>Let the AI decide</span>
+          <span class="when-busy"><i class="spinner"></i>Thinking…</span>
+        </button>
+        <div class="ai-chain">Gemini · backup BullsAI (UB) · rule-based safety net</div>
+      </div>
+
+      <!-- Step 4: impact -->
+      <div class="pane" data-step="4">
+        <div class="eyebrow"><svg class="ic"><use href="#i-chart"/></svg>Step 4 · Impact</div>
         <div class="impact">
-          <div class="impact-big"><span id="riskDrop">–</span><small>less collision risk</small></div>
+          <div class="impact-big"><span id="riskDrop">–</span><small>less collision risk tonight</small></div>
           <div class="impact-scores">
             <div><span class="label">Before</span><b id="riskBefore">–</b></div>
             <span class="arrow">→</span>
@@ -136,16 +215,16 @@
           <div class="bar big"><span id="barAfter" class="good"></span></div>
         </div>
         <div class="tiles">
-          <div class="tile"><div class="label">Windows off / dimmed</div><div class="value" id="countOff">–</div></div>
-          <div class="tile"><div class="label">Energy saved tonight</div><div class="value" id="kwh">–</div></div>
-          <div class="tile"><div class="label">Money saved tonight</div><div class="value" id="usd">–</div></div>
+          <div class="tile"><div class="label">Off / dimmed</div><div class="value" id="countOff">–</div></div>
+          <div class="tile"><div class="label">Energy saved</div><div class="value" id="kwh">–</div></div>
+          <div class="tile"><div class="label">Money saved</div><div class="value" id="usd">–</div></div>
         </div>
         <blockquote class="reason">
           <p id="reason">–</p>
           <footer><span class="source" id="source"></span>
-            <button type="button" class="btn small" id="replayBtn">🔊 Play voice alert</button></footer>
+            <button type="button" class="btn small" id="replayBtn"><svg class="ic"><use href="#i-sound"/></svg>Play alert</button></footer>
         </blockquote>
-        <button type="button" class="btn ghost" id="startOver">↺ Start over</button>
+        <button type="button" class="btn ghost" id="startOver"><svg class="ic"><use href="#i-redo"/></svg>Run again</button>
       </div>
     </aside>
   </main>
@@ -166,52 +245,6 @@
       <input type="range" id="slider" min="0" max="100" value="50" aria-label="Before and after" />
     </div>
   </section>
-
-  <dialog id="addDialog" class="sheet" aria-labelledby="addTitle">
-    <form id="addForm" method="dialog" class="sheet-body">
-      <div class="sheet-head">
-        <div>
-          <h2 id="addTitle">Add a building</h2>
-          <p class="explain">Any photo, day or night. We'll count its floors, read tonight's sky there and build it in 3D.</p>
-        </div>
-        <button type="button" class="close" id="addClose" aria-label="Close">✕</button>
-      </div>
-
-      <div class="add-fields" id="addFields">
-        <label class="drop" id="drop">
-          <input type="file" id="addPhoto" accept="image/jpeg,image/png,image/webp" />
-          <img id="addPreview" alt="" hidden />
-          <span class="drop-hint" id="dropHint"><b>🏢</b><span>Drop a building photo here<br /><small>or click to choose · JPG or PNG</small></span></span>
-        </label>
-        <div class="field-col">
-          <label class="field"><span>Building name</span>
-            <input id="addName" type="text" maxlength="60" placeholder="e.g. Davis Hall" required /></label>
-          <label class="field"><span>Address</span>
-            <input id="addAddress" type="text" maxlength="160" placeholder="Street address, city, state" required /></label>
-          <p class="hint">We read tonight's real forecast for this address.</p>
-          <details class="manual" id="addManual">
-            <summary>Floors and windows (optional)</summary>
-            <div class="manual-row">
-              <label class="field"><span>Floors</span><input id="addFloors" type="number" min="1" max="60" placeholder="auto" /></label>
-              <label class="field"><span>Windows per floor</span><input id="addCols" type="number" min="1" max="40" placeholder="auto" /></label>
-            </div>
-          </details>
-          <p class="form-error" id="addError" hidden></p>
-          <div class="sheet-actions">
-            <button type="button" class="btn ghost" id="addCancel">Cancel</button>
-            <button type="submit" class="btn primary" id="addSubmit">Build it ✨</button>
-          </div>
-        </div>
-      </div>
-
-      <ol class="progress" id="addProgress" hidden>
-        <li><i></i><span>📍 Finding the address</span></li>
-        <li><i></i><span>🌙 Reading tonight's sky there</span></li>
-        <li><i></i><span>🪟 Counting floors and windows</span></li>
-        <li><i></i><span>🏗️ Building it in 3D</span></li>
-      </ol>
-    </form>
-  </dialog>
 
   <div class="toast" id="toast" role="status"></div>
 

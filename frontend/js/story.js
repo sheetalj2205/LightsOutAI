@@ -1,20 +1,24 @@
-/* Lights Out AI: the 3-step story page.
-   Talks to the backend only through Sakshi's window.LO (js/api.js), draws with scene3d.js. */
+/* Lights Out AI: the 4-step page.
+   1 Photo -> 2 Location (tonight's forecast) -> 3 AI decides -> 4 Impact.
+   Talks to the backend through Sakshi's window.LO (js/api.js), draws with scene3d.js. */
 import { createScene } from "./scene3d.js";
-import { initAddBuilding } from "./addbuilding.js";
+import { initPhotoStep } from "./photostep.js";
 
 const LO = window.LO;
 const $ = (id) => document.getElementById(id);
 const AI_NAMES = { gemini: "Decided by Gemini", bullsai: "Decided by BullsAI (UB)", fallback: "Rule-based safety net" };
-const WAVE_GAP = 80; // ms between windows, top floor first
+const WAVE_GAP = 80;            // ms between windows, top floor first
+const SAMPLE = "Demo Hall";     // generated sample building, only on request
+const KEEP = "lightsout_building";
 
 let view = null;          // 3D scene, or the flat fallback
-let building = null;      // current building summary from the backend
+let building = null;      // current building summary (null = no building yet)
 let lastDecision = null;
-let step = 1;
+let hasForecast = false;
 let deciding = false;
 let waveTimers = [];
 let socket = null;
+let photo = null;         // step-1 controller
 
 // ---------------------------------------------------------------- helpers
 function toast(msg, ms = 3200) {
@@ -26,16 +30,22 @@ function toast(msg, ms = 3200) {
 }
 const score = (r) => Math.round((r || 0) * 100);
 const bust = (u) => (u ? `${LO.url(u)}?t=${Date.now()}` : "");
+const remember = (name) => { try { name ? localStorage.setItem(KEEP, name) : localStorage.removeItem(KEEP); } catch (e) { /* storage blocked */ } };
+const remembered = () => { try { return localStorage.getItem(KEEP); } catch (e) { return null; } };
 
 function animateNumber(el, to, fmt, ms = 1200) {
-  const from = 0, start = performance.now();
+  const start = performance.now();
   const tick = (now) => {
     const p = Math.min((now - start) / ms, 1);
-    const eased = 1 - Math.pow(1 - p, 3);
-    el.textContent = fmt(from + (to - from) * eased);
+    el.textContent = fmt(to * (1 - Math.pow(1 - p, 3)));
     if (p < 1) requestAnimationFrame(tick);
   };
   requestAnimationFrame(tick);
+}
+
+function fmtTime(iso) {
+  const d = iso ? new Date(iso) : null;
+  return d && !isNaN(d) ? d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : "";
 }
 
 // ---------------------------------------------------------------- viewer
@@ -46,6 +56,7 @@ function flatFallback(container) {
   const cells = new Map();
   return {
     setBuilding(b) {
+      grid.hidden = false;
       grid.innerHTML = "";
       cells.clear();
       grid.style.gridTemplateColumns = `repeat(${b.cols}, 1fr)`;
@@ -60,6 +71,7 @@ function flatFallback(container) {
         }
       }
     },
+    setEmpty() { grid.hidden = true; },
     setWindow(id, state) { const i = cells.get(id); if (i) i.className = state; },
     setWindows(ws) { ws.forEach((w) => this.setWindow(w.id, w.state)); },
     setRiskView() {},
@@ -74,7 +86,6 @@ function initViewer() {
   } catch (e) {
     console.warn("3D not available, using the flat building", e);
     view = flatFallback($("scene"));
-    $("riskToggle").closest("label").classList.add("hidden");
   }
 }
 
@@ -82,20 +93,30 @@ function sameShape(a, b) {
   return a && b && a.building === b.building && a.floors === b.floors && a.cols === b.cols;
 }
 
+function setChrome(hasBuilding) {
+  $("emptyState").hidden = hasBuilding;
+  $("buildingName").hidden = !hasBuilding;
+  $("riskSwitch").hidden = !hasBuilding || view.setRiskView.length === 0;
+  $("legendLight").hidden = !hasBuilding || $("riskToggle").checked;
+  $("legendRisk").classList.toggle("hidden", !hasBuilding || !$("riskToggle").checked);
+}
+
 function applyBuilding(b, opts = {}) {
   clearWave();
   if (sameShape(building, b) && !opts.rise) view.setWindows(b.windows);
   else view.setBuilding(b, opts);
-  view.setBirdMode(b.windows.some((w) => w.state === "off") && lastDecision ? "safe" : "attracted");
+  view.setBirdMode(lastDecision ? "safe" : "attracted");
   building = b;
+  setChrome(true);
+  const chip = $("buildingName");
+  chip.innerHTML = "";
+  chip.append(b.building);
   const place = b.location && b.location.place;
-  $("buildingName").innerHTML = "";
-  $("buildingName").append(b.building);
   if (place) {
     const where = document.createElement("span");
     where.className = "where";
     where.textContent = ` · ${place}`;
-    $("buildingName").append(where);
+    chip.append(where);
   }
   setRiskNow(b.risk);
   showPhoto();
@@ -115,28 +136,60 @@ function playWave(actions, finalWindows) {
 
 // ---------------------------------------------------------------- steps
 function goTo(n) {
-  if (n === 3 && !lastDecision) { toast("Run step 2 first: let the AI decide."); n = 2; }
-  step = n;
+  if (n >= 2 && !building) { toast("Start with a photo of the building."); n = 1; }
+  if (n >= 3 && !hasForecast) { toast("Add the building's address first."); n = 2; }
+  if (n === 4 && !lastDecision) n = 3;
   document.querySelectorAll(".pane").forEach((p) => p.classList.toggle("active", +p.dataset.step === n));
   document.querySelectorAll(".step").forEach((s) => {
     const k = +s.dataset.go;
     s.classList.toggle("active", k === n);
     s.classList.toggle("done", k < n);
   });
+  document.querySelectorAll(".step-line").forEach((line, i) => line.classList.toggle("filled", i + 1 < n));
 }
 
-// ---------------------------------------------------------------- step 1: tonight's forecast
-let hasForecast = false;
-
-function fmtTime(iso) {
-  const d = iso ? new Date(iso) : null;
-  return d && !isNaN(d) ? d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : "";
+// No building yet: empty plot in 3D and the upload form.
+function startEmpty() {
+  clearWave();
+  building = null;
+  lastDecision = null;
+  view.setEmpty();
+  setChrome(false);
+  $("photoSection").hidden = true;
+  askForLocation();
+  photo.reset();
+  remember(null);
+  LO.api().buildings().then((l) => fillBuildings(l, null)).catch(() => {});
+  goTo(1);
 }
 
+async function openBuilding(name, { rise = true } = {}) {
+  const b = await LO.api().select(name);
+  lastDecision = null;
+  building = null;
+  applyBuilding(b, { rise });
+  photo.showResult(b);
+  remember(b.building);
+  fillBuildings(await LO.api().buildings().catch(() => null), b.building);
+  await loadForecast(b);
+  goTo(2);
+}
+
+// ---------------------------------------------------------------- step 1 result
+async function photoAnalyzed(b) {
+  lastDecision = null;
+  building = null;
+  applyBuilding(b, { rise: true });
+  remember(b.building);
+  fillBuildings(await LO.api().buildings().catch(() => null), b.building);
+  if (b.conditions) showConditions(b.conditions);
+  else askForLocation();
+}
+
+// ---------------------------------------------------------------- step 2: tonight's forecast
 function showConditions(c) {
   hasForecast = true;
   $("condSummary").textContent = c.summary || "Tonight's forecast";
-  $("skyEyebrow").textContent = "Step 1 · Tonight's sky";
   $("whereForm").hidden = true;
   $("whereLine").hidden = false;
   $("wherePlace").textContent = c.location || "";
@@ -144,7 +197,7 @@ function showConditions(c) {
   $("condTiles").hidden = false;
   $("nextBtn").disabled = false;
 
-  // Where the forecast came from, with a link to the source's own page.
+  // Where the forecast came from, linked to the source's own page.
   const src = $("sourceLine");
   src.innerHTML = "";
   if (c.source) {
@@ -178,7 +231,6 @@ function showConditions(c) {
 function askForLocation(prefill = "") {
   hasForecast = false;
   $("condSummary").textContent = "Where is this building?";
-  $("skyEyebrow").textContent = "Step 1 · Tonight's sky";
   $("whereForm").hidden = false;
   $("whereLine").hidden = true;
   $("sourceLine").hidden = true;
@@ -191,7 +243,7 @@ function askForLocation(prefill = "") {
 async function submitLocation(ev) {
   ev.preventDefault();
   const address = $("whereInput").value.trim();
-  if (!address) return;
+  if (!address) { $("whereInput").focus(); return; }
   const btn = $("whereBtn");
   btn.disabled = true;
   btn.textContent = "Finding it…";
@@ -203,10 +255,8 @@ async function submitLocation(ev) {
     });
     const body = await r.json().catch(() => ({}));
     if (!r.ok) throw new Error(body.detail || `HTTP ${r.status}`);
-    building = { ...building, location: body.location };
-    applyBuilding(building);
+    applyBuilding({ ...building, location: body.location, risk: body.risk });
     showConditions(body.conditions);
-    setRiskNow(body.risk);
   } catch (e) {
     $("whereError").textContent = e.message;
     $("whereError").hidden = false;
@@ -236,19 +286,10 @@ function setRiskNow(r) {
   bar.className = s >= 30 ? "bad" : s >= 12 ? "" : "good";
 }
 
-async function refreshRisk() {
-  try {
-    const b = await LO.api().windows();
-    if (sameShape(building, b)) { view.setWindows(b.windows); building = b; }
-    else applyBuilding(b);
-    setRiskNow(b.risk);
-  } catch (e) { /* keep the old numbers */ }
-}
-
-// ---------------------------------------------------------------- step 2: decide
+// ---------------------------------------------------------------- step 3: decide
 async function decide() {
   if (deciding) return;
-  if (!hasForecast) { toast("Add the building's address first (step 1)."); goTo(1); return; }
+  if (!hasForecast) { goTo(2); return; }
   deciding = true;
   const btn = $("decideBtn");
   btn.classList.add("busy");
@@ -262,7 +303,7 @@ async function decide() {
     // Birds stay trapped while the lights click off, then fly free.
     waveTimers.push(setTimeout(() => view.setBirdMode("safe"), waveMs + 600));
     showDecision(d);
-    goTo(3);
+    goTo(4);
     speak(d.reason);
   } catch (e) {
     view.thinking(false);
@@ -275,7 +316,7 @@ async function decide() {
   }
 }
 
-// ---------------------------------------------------------------- step 3: impact
+// ---------------------------------------------------------------- step 4: impact
 function showDecision(d) {
   const before = score(d.risk_before), after = score(d.risk_after);
   const drop = before > 0 ? Math.round((1 - after / before) * 100) : 0;
@@ -305,19 +346,18 @@ async function speak(text) {
   try { await LO.speak(text); } catch (e) { /* voice is a bonus */ }
 }
 
-async function startOver() {
+async function runAgain() {
   clearWave();
   try {
     const b = await LO.api().reset();
     lastDecision = null;
     applyBuilding(b);
     view.setBirdMode("attracted");
-    await refreshRisk();
-    goTo(1);
+    goTo(3);
   } catch (e) { toast(`Reset failed: ${e.message}`); }
 }
 
-// ---------------------------------------------------------------- photo compare
+// ---------------------------------------------------------------- photo compare (below the fold)
 function showPhoto() {
   const sec = $("photoSection");
   if (!building || !building.photo_url) { sec.hidden = true; return; }
@@ -326,7 +366,6 @@ function showPhoto() {
   $("compare").classList.toggle("single", simulated);
   $("debugToggle").closest("label").classList.toggle("hidden", simulated);
   if (simulated) {
-    // Day photo: show the floors and windows we found; lights tonight are simulated.
     $("imgBefore").src = bust(building.debug_url || building.photo_url);
     $("beforeTag").textContent = "Floors and windows found · tonight's lights simulated (day photo)";
     return;
@@ -335,7 +374,7 @@ function showPhoto() {
   const before = $("debugToggle").checked && building.debug_url ? building.debug_url : building.photo_url;
   $("imgBefore").src = bust(before);
   if (building.after_url) { $("imgAfter").src = bust(building.after_url); $("afterTag").textContent = "After the AI acts"; }
-  else { $("imgAfter").src = bust(building.photo_url); $("afterTag").textContent = "After: run step 2"; }
+  else { $("imgAfter").src = bust(building.photo_url); $("afterTag").textContent = "After: run step 3"; }
 }
 
 function setSlider(pct) {
@@ -345,123 +384,121 @@ function setSlider(pct) {
 
 // ---------------------------------------------------------------- top bar
 function setStatus(kind, text) {
-  const s = $("status");
-  s.className = `status ${kind}`;
+  $("status").className = `status ${kind}`;
   $("statusText").textContent = text;
 }
 
 function fillBuildings(list, current) {
   const sel = $("buildingSelect");
   sel.innerHTML = "";
-  const names = (list && list.buildings ? list.buildings.map((b) => b.building) : [current]).filter(Boolean);
+  const names = (list && list.buildings ? list.buildings.map((b) => b.building) : []).filter(Boolean);
+  if (!current) {
+    const ph = document.createElement("option");
+    ph.textContent = "Switch building…";
+    ph.value = "";
+    ph.disabled = ph.selected = true;
+    sel.appendChild(ph);
+  }
   for (const name of names) {
     const o = document.createElement("option");
     o.value = o.textContent = name;
     o.selected = name === current;
     sel.appendChild(o);
   }
-  sel.closest("label").classList.toggle("hidden", names.length < 2);
-}
-
-function tickClock() {
-  $("clock").textContent = new Date().toLocaleString([], { weekday: "short", hour: "numeric", minute: "2-digit" });
+  sel.closest("label").classList.toggle("hidden", names.length < (current ? 2 : 1));
 }
 
 // ---------------------------------------------------------------- loading + live updates
-async function loadAll() {
-  const api = LO.api();
-  const b = await api.windows();
-  building = null; // force a rebuild for a fresh load
-  applyBuilding(b);
-  await loadForecast(b);
-  fillBuildings(await api.buildings().catch(() => null), b.building);
+async function loadStart() {
+  const list = await LO.api().buildings();
+  fillBuildings(list, null);
+  const saved = remembered();
+  if (saved && list.buildings.some((b) => b.building === saved)) await openBuilding(saved, { rise: false });
+  else startEmpty();
 }
+
+const isMine = (msg) => building && msg.building === building.building;
 
 function connectLive() {
   socket = LO.connectSocket({
     status: (ok) => { if (!LO.fake) setStatus(ok ? "live" : "off", ok ? "Live" : "Offline · retrying"); },
-    building: (msg) => { if (!LO.fake && !deciding) applyBuilding(msg); },
-    command: (msg) => { if (!LO.fake) view.setWindow(msg.id, msg.state); },
-    conditions: (msg) => { if (!LO.fake && msg.location) { showConditions(msg); refreshRisk(); } },
+    building: (msg) => { if (!LO.fake && !deciding && isMine(msg)) applyBuilding(msg); },
+    command: (msg) => { if (!LO.fake && building) view.setWindow(msg.id, msg.state); },
+    conditions: (msg) => { if (!LO.fake && building && building.location && msg.location) showConditions(msg); },
     decision: (msg) => {
-      // A decision started somewhere else (classic page, API docs): show it here too.
-      if (LO.fake || deciding) return;
+      // A decision started somewhere else (classic page, API docs) for this building.
+      if (LO.fake || deciding || !isMine(msg)) return;
       lastDecision = msg;
       showDecision(msg);
-      goTo(3);
+      goTo(4);
       setTimeout(() => view.setBirdMode("safe"), ((msg.actions || []).length * WAVE_GAP) + 600);
     },
   });
 }
 
-async function setFake(on, quiet) {
+async function setFake(on) {
   LO.fake = on;
-  $("fakeBtn").textContent = `Fake mode: ${on ? "on" : "off"}`;
-  if (on) setStatus("fake", "Fake data");
-  else setStatus(socket && socket.isOpen() ? "live" : "off", socket && socket.isOpen() ? "Live" : "Connecting…");
+  $("fakeBtn").textContent = `Offline demo data: ${on ? "on" : "off"}`;
   lastDecision = null;
-  try { await loadAll(); goTo(1); if (!quiet) toast(on ? "Fake mode: built-in data" : "Back to the live backend"); }
-  catch (e) { toast(`Could not load: ${e.message}`); }
-}
-
-// ---------------------------------------------------------------- new building
-async function buildingAdded(b) {
-  lastDecision = null;
-  applyBuilding(b, { rise: true });
-  view.setBirdMode("attracted");
-  if (b.conditions) showConditions(b.conditions);
-  else askForLocation();
-  fillBuildings(await LO.api().buildings().catch(() => null), b.building);
-  goTo(1);
-  const how = b.lights === "simulated" ? "lights simulated from a day photo" : "lit windows found in the photo";
-  toast(`${b.building}: ${b.floors} floors × ${b.cols} windows · ${how}`, 5000);
+  try {
+    if (on) {
+      setStatus("fake", "Offline demo");
+      const b = await LO.api().windows();
+      building = null;
+      applyBuilding(b, { rise: true });
+      photo.showResult(b);
+      showConditions(await LO.api().conditions());
+      goTo(2);
+    } else {
+      setStatus(socket && socket.isOpen() ? "live" : "off", socket && socket.isOpen() ? "Live" : "Connecting…");
+      await loadStart();
+    }
+  } catch (e) { toast(`Could not load: ${e.message}`); }
 }
 
 // ---------------------------------------------------------------- wire up
 function wire() {
   document.querySelectorAll("[data-go]").forEach((b) => b.addEventListener("click", () => goTo(+b.dataset.go)));
   $("decideBtn").addEventListener("click", decide);
-  $("startOver").addEventListener("click", startOver);
+  $("startOver").addEventListener("click", runAgain);
   $("replayBtn").addEventListener("click", () => lastDecision && speak(lastDecision.reason));
   $("riskToggle").addEventListener("change", (e) => {
     view.setRiskView(e.target.checked);
-    $("legendLight").classList.toggle("hidden", e.target.checked);
+    $("legendLight").hidden = e.target.checked;
     $("legendRisk").classList.toggle("hidden", !e.target.checked);
   });
   $("debugToggle").addEventListener("change", showPhoto);
   $("whereForm").addEventListener("submit", submitLocation);
   $("whereChange").addEventListener("click", () => askForLocation(building && building.location ? building.location.address : ""));
   $("slider").addEventListener("input", (e) => setSlider(e.target.value));
-  $("buildingSelect").addEventListener("change", async (e) => {
-    try {
-      const b = await LO.api().select(e.target.value);
-      lastDecision = null;
-      applyBuilding(b, { rise: true });
-      await loadForecast(b);
-      await refreshRisk();
-      goTo(1);
-    }
-    catch (err) { toast(`Could not switch building: ${err.message}`); }
-  });
+  $("newBtn").addEventListener("click", () => { if (LO.fake) setFake(false); else startEmpty(); });
+  $("anotherPhoto").addEventListener("click", startEmpty);
+  $("emptyUpload").addEventListener("click", () => { goTo(1); photo.pick(); });
+  const sample = async () => {
+    $("sampleMenuBtn").closest("details").open = false;
+    try { await openBuilding(SAMPLE); toast("Sample building loaded. Add its address to get tonight's forecast."); }
+    catch (e) { toast("The sample building isn't available on this server."); }
+  };
+  $("sampleBtn").addEventListener("click", sample);
+  $("sampleMenuBtn").addEventListener("click", sample);
+  $("buildingSelect").addEventListener("change", (e) => openBuilding(e.target.value).catch((err) => toast(`Could not switch building: ${err.message}`)));
   $("fakeBtn").addEventListener("click", () => { $("fakeBtn").closest("details").open = false; setFake(!LO.fake); });
   $("docsLink").href = LO.url("/docs");
-  initAddBuilding({ toast, onAdded: buildingAdded });
-  tickClock();
-  setInterval(tickClock, 30000);
   setSlider(50);
 }
 
 async function main() {
-  wire();
   initViewer();
+  photo = initPhotoStep({ toast, onAnalyzed: photoAnalyzed });
+  wire();
   goTo(1);
   connectLive();
   try {
-    await loadAll();
+    await loadStart();
   } catch (e) {
-    console.warn("Backend not reachable, switching to fake mode", e);
-    await setFake(true, true);
-    toast("Backend not reachable: showing built-in demo data");
+    console.warn("Backend not reachable, switching to offline demo data", e);
+    await setFake(true);
+    toast("Backend not reachable: showing offline demo data");
   }
 }
 
