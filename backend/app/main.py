@@ -14,9 +14,10 @@ from typing import Optional
 import cv2
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import Response
 from fastapi.staticfiles import StaticFiles
 
-from . import config, db, decide as decider, detection, risk, scenarios
+from . import config, db, decide as decider, detection, risk, scenarios, voice
 from .demo import make_demo_photo
 from .models import AlertRequest, DecideRequest, SimulateRequest
 from .state import Building, hub, state
@@ -211,10 +212,18 @@ async def simulate(req: SimulateRequest):
     return cond
 
 
-@app.post("/api/alert")
-def alert(req: AlertRequest):
-    """Placeholder — Sakshi implements this with ElevenLabs (returns an audio clip)."""
-    raise HTTPException(501, "Not built yet: Sakshi's ElevenLabs voice alert goes here")
+@app.post("/api/alert", response_class=Response,
+          responses={200: {"content": {"audio/mpeg": {}}}})
+async def alert(req: AlertRequest):
+    """Turns the AI's reason into speech with ElevenLabs. Returns an mp3 clip.
+    503 if ElevenLabs is not set up or fails (the page then uses the browser's voice)."""
+    try:
+        audio = await asyncio.to_thread(voice.text_to_speech, req.text)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
+    except voice.VoiceUnavailable as exc:
+        raise HTTPException(503, str(exc))
+    return Response(content=audio, media_type="audio/mpeg")
 
 
 @app.get("/api/decision")

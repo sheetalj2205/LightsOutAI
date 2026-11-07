@@ -24,7 +24,7 @@ The server starts with a built-in **Demo Hall** building, so every call below wo
 | `POST /api/simulate` (JSON `{"scenario": "clear" \| "foggy_migration" \| "live"}`) | The new conditions |
 | `POST /api/reset` | All windows back to how they were in the photo (to run the demo again) |
 | `GET /api/decision` | The last decision (or `{}`) |
-| `POST /api/alert` | **Yours** — ElevenLabs voice. Currently returns 501 |
+| `POST /api/alert` (JSON `{"text": "..."}`) | ElevenLabs voice: returns an mp3 clip. 503 if no key (the page then uses the browser voice) |
 
 Image URLs (`photo_url`, `debug_url`, `after_url`) are paths: prefix them with the base URL.
 `after_url` is the real photo with the chosen windows darkened — ready for the before/after view.

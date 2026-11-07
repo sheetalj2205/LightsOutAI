@@ -2,7 +2,7 @@ fastapi==0.115.6
 uvicorn[standard]==0.32.1
 python-multipart==0.0.20
 python-dotenv==1.0.1
-pydantic==2.10.4
+pydantic==2.12.5
 numpy==2.2.1
 opencv-python-headless==4.10.0.84
 google-genai==3.0.0

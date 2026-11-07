@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Lights Out AI · Twin building</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body class="twin-page">
+  <div id="twin">
+    <div class="overlay-top">
+      <div>
+        <h1 id="buildingName">Connecting…</h1>
+        <div class="muted" id="condLine"></div>
+      </div>
+      <div class="spacer"></div>
+      <div style="text-align:right">
+        <div class="clock" id="clock"></div>
+        <div class="row" style="justify-content:flex-end;margin-top:6px">
+          <div class="status" id="status"><span class="dot"></span><span id="statusText">Connecting…</span></div>
+          <button class="btn small" id="fakeBtn">Fake mode</button>
+          <button class="btn small" id="fakeRun" style="display:none">Run fake decision</button>
+        </div>
+      </div>
+    </div>
+    <div class="banner" id="banner"></div>
+  </div>
+
+  <script src="js/api.js"></script>
+  <script src="js/twin.js"></script>
+  <script>
+    (function () {
+      const $ = (id) => document.getElementById(id);
+      const twin = new Twin($("twin"));
+      let socket = null;
+
+      setInterval(() => {
+        $("clock").textContent = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+      }, 1000);
+
+      function setStatus(kind, text) {
+        $("status").className = `status ${kind}`;
+        $("statusText").textContent = text;
+      }
+      function drawBuilding(b) {
+        $("buildingName").textContent = b.building;
+        twin.draw(b);
+      }
+      function showConditions(c) {
+        $("condLine").textContent = `${c.summary} · migration ${c.migration_level} (estimated)`;
+        twin.setFog(c.fog);
+      }
+      function showDecision(d) {
+        if (!d.reason) return;
+        $("banner").textContent = d.reason;
+        $("banner").classList.add("show");
+      }
+
+      function start() {
+        LO.api().conditions().then(showConditions).catch(() => {});
+        LO.api().lastDecision().then(showDecision).catch(() => {});
+        socket = LO.connectSocket({
+          status: (ok) => setStatus(ok ? "live" : "", ok ? "Live" : "Reconnecting…"),
+          building: (msg) => { drawBuilding(msg); $("banner").classList.remove("show"); },
+          command: (msg) => twin.setWindow(msg.id, msg.state),
+          decision: showDecision,
+          conditions: showConditions,
+        });
+      }
+
+      $("fakeBtn").addEventListener("click", async () => {
+        LO.fake = !LO.fake;
+        $("fakeBtn").classList.toggle("active", LO.fake);
+        $("fakeRun").style.display = LO.fake ? "" : "none";
+        $("banner").classList.remove("show");
+        if (LO.fake) {
+          if (socket) socket.close();
+          setStatus("fake", "Fake data");
+          await LO.api().reset();
+          await LO.api().simulate("foggy_migration");
+          drawBuilding(await LO.api().windows());
+          showConditions(await LO.api().conditions());
+        } else {
+          setStatus("", "Connecting…");
+          start();
+        }
+      });
+
+      $("fakeRun").addEventListener("click", async () => {
+        await LO.api().reset();
+        drawBuilding(await LO.api().windows());
+        const d = await LO.api().decide();
+        twin.wave(d.actions);
+        showDecision(d);
+      });
+
+      start();
+    })();
+  </script>
+</body>
+</html>
