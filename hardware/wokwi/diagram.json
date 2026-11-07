@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "author": "Lights Out AI",
+  "editor": "wokwi",
+  "parts": [
+    { "type": "board-esp32-devkit-c-v4", "id": "esp", "top": 0, "left": -150, "attrs": {} },
+    {
+      "type": "wokwi-neopixel-matrix",
+      "id": "building",
+      "top": -40,
+      "left": 60,
+      "attrs": { "rows": "5", "cols": "6", "matrixLayout": "serpentine" }
+    },
+    { "type": "wokwi-pushbutton", "id": "btn", "top": 180, "left": 60, "attrs": { "color": "blue", "label": "Demo" } }
+  ],
+  "connections": [
+    [ "esp:TX", "$serialMonitor:RX", "", [] ],
+    [ "esp:RX", "$serialMonitor:TX", "", [] ],
+    [ "esp:5", "building:DIN", "green", [] ],
+    [ "esp:5V", "building:VCC", "red", [] ],
+    [ "esp:GND.1", "building:GND", "black", [] ],
+    [ "esp:0", "btn:1.l", "blue", [] ],
+    [ "esp:GND.2", "btn:2.l", "black", [] ]
+  ],
+  "dependencies": {}
+}

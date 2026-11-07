@@ -19,6 +19,7 @@ from fastapi.staticfiles import StaticFiles
 
 from . import config, db, decide as decider, detection, risk, scenarios, voice
 from .demo import make_demo_photo
+from .led import LedView
 from .models import AlertRequest, DecideRequest, SimulateRequest
 from .state import Building, hub, state
 
@@ -94,7 +95,8 @@ def _get_building(name: Optional[str]) -> Building:
 def health():
     return {"ok": True, "gemini": bool(config.GEMINI_API_KEY), "bullsai": decider.bullsai_ready(),
             "tiger_data": db.enabled(),
-            "twin_pages": len(hub.clients), "scenario": scenarios.active_scenario(),
+            "twin_pages": len(hub.clients) - hub.led_boards(), "led_boards": hub.led_boards(),
+            "scenario": scenarios.active_scenario(),
             "current_building": state.current}
 
 
@@ -243,11 +245,19 @@ def event_log(limit: int = 50):
 async def ws_endpoint(ws: WebSocket):
     """Twin pages connect here.
     Server -> page:  {"type": "building", ...windows}  then commands {"id": 12, "state": "off"}
-    Page -> server:  {"id": 12, "state": "off", "ok": true}"""
-    await hub.connect(ws)
+    Page -> server:  {"id": 12, "state": "off", "ok": true}
+    LED boards connect to /ws?device=led&floors=5&cols=6 and get compact LED messages (see led.py)."""
+    q = ws.query_params
+    led = None
+    if q.get("device") == "led":
+        try:
+            led = LedView(floors=int(q.get("floors", 5)), cols=int(q.get("cols", 6)))
+        except ValueError:
+            led = LedView(floors=5, cols=6)
+    await hub.connect(ws, led)
     try:
         if state.current:
-            await ws.send_text(json.dumps({"type": "building"} | state.building().summary()))
+            await hub.send_to(ws, {"type": "building"} | state.building().summary())
         while True:
             try:
                 msg = json.loads(await ws.receive_text())

@@ -7,6 +7,7 @@ from typing import Optional
 
 from fastapi import WebSocket
 
+from .led import LedView
 from .models import Window
 
 log = logging.getLogger("lightsout.ws")
@@ -53,23 +54,32 @@ class TwinHub:
     """Keeps the list of connected twin/dashboard pages and sends window commands."""
 
     def __init__(self) -> None:
-        self.clients: set[WebSocket] = set()
+        self.clients: dict[WebSocket, Optional[LedView]] = {}  # LedView for LED boards, None for pages
         self.confirmed: dict[int, str] = {}  # window id -> state the twin page confirmed
 
-    async def connect(self, ws: WebSocket) -> None:
+    async def connect(self, ws: WebSocket, led: Optional[LedView] = None) -> None:
         await ws.accept()
-        self.clients.add(ws)
-        log.info("twin page connected (%d total)", len(self.clients))
+        self.clients[ws] = led
+        log.info("%s connected (%d total)", "LED board" if led else "twin page", len(self.clients))
 
     def disconnect(self, ws: WebSocket) -> None:
-        self.clients.discard(ws)
-        log.info("twin page left (%d total)", len(self.clients))
+        if self.clients.pop(ws, None) is not None:
+            log.info("LED board left")
+        log.info("client left (%d total)", len(self.clients))
+
+    def led_boards(self) -> int:
+        return sum(1 for v in self.clients.values() if v is not None)
+
+    async def send_to(self, ws: WebSocket, message: dict) -> None:
+        view = self.clients.get(ws)
+        out = view.translate(message) if view is not None else [message]
+        for m in out:
+            await ws.send_text(json.dumps(m))
 
     async def broadcast(self, message: dict) -> None:
-        text = json.dumps(message)
         for ws in list(self.clients):
             try:
-                await ws.send_text(text)
+                await self.send_to(ws, message)
             except Exception:
                 self.disconnect(ws)
 

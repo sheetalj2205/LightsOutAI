@@ -50,3 +50,8 @@ ws.onmessage = (e) => {
 - Right after connecting you receive a `building` message with every window.
 - Commands arrive ~80 ms apart, top floor first, so windows go dark in a visible wave.
 - Reconnect after 2 s if the socket closes (the server may restart during the hackathon).
+
+## LED boards (Wokwi ESP32)
+Connect to `/ws?device=led&floors=5&cols=6`. The building is mapped onto that grid and the board gets
+`{"type":"frame","states":"OODF…","colors":[…]}` then `{"led": 7, "state": "off"}`, and replies with `"ok": true`.
+Twin pages are not affected. `GET /api/health` shows `led_boards`. See [hardware/README.md](hardware/README.md).

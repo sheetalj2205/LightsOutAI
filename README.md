@@ -20,6 +20,7 @@ night photo ─► window detection (OpenCV) ─► risk per window ◄─ weath
 | [frontend/](frontend/) | Sakshi | Twin building page, dashboard, voice alert |
 | [photos/](photos/) | Sakshi | Night photos of UB buildings |
 | [deploy/](deploy/) | Sheetal | Vultr setup |
+| [hardware/wokwi/](hardware/wokwi/) | Sheetal | Simulated ESP32 + LED "mini building" ([guide](hardware/README.md)) |
 
 - **Setup, keys and deploy, step by step:** [SETUP.md](SETUP.md)
 - **API for the frontend:** [API.md](API.md)
