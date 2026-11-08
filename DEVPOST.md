@@ -88,6 +88,14 @@ collisions **6× in fall and 11× in spring**. We use that result to estimate th
 - **Simulated:** lights switch on a 3D model and an LED board, not real building controls. The same commands
   could drive a building management system or smart switches.
 
+## What would turn our estimates into real data
+| Estimate | Why it's estimated | What would make it real |
+|---|---|---|
+| Tonight's migration | BirdCast has no free public API, so we use their method on weather data | BirdCast (Cornell) data access: radar-measured birds in the air tonight |
+| Collision drop | No one counts collisions at this building; we use one Chicago study | Collision counts at the building (volunteers, dBird, Global Bird Rescue) |
+| Energy saved | We assume ~60 W per window | The building's meter or real fixture wattage |
+| Window risk score | No per-window collision data; our own weights | Collision counts per facade to tune the weights |
+
 ## What Vultr would have given us
 - **A fixed address.** Our tunnel link changes on every restart, so we had to update the LED board's settings
   and every shared link. A Vultr server with our own domain keeps one address.
