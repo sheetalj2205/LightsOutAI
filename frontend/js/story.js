@@ -368,9 +368,77 @@ function showDecision(d) {
   es.hidden = !est.source;
 
   $("reason").textContent = d.reason || "";
+  showSwitchList(d);
   const src = $("source");
   src.textContent = AI_NAMES[d.source] || d.source || "";
   src.className = `source ${d.source === "fallback" ? "fallback" : ""}`;
+}
+
+// Floor and window number for every changed window, so staff can reach the right room or flat.
+// Grouped by side and floor, top floor first; window numbers count from the left.
+function switchListLines(d) {
+  const all = (building && building.windows) || d.windows || [];
+  const byId = new Map(all.map((w) => [w.id, w]));
+  // Window number = position from the left on its floor and side (unique, unlike detected columns).
+  const number = new Map();
+  const rows = new Map();
+  for (const w of all) {
+    const k = `${w.face || "front"}|${w.floor}`;
+    if (!rows.has(k)) rows.set(k, []);
+    rows.get(k).push(w);
+  }
+  for (const row of rows.values()) {
+    row.sort((a, b) => a.x - b.x || a.col - b.col).forEach((w, i) => number.set(w.id, i + 1));
+  }
+  const groups = new Map();
+  for (const a of d.actions || []) {
+    const w = byId.get(a.id);
+    if (!w) continue;
+    const face = w.face || "front";
+    const key = `${face}|${w.floor}|${a.state}`;
+    if (!groups.has(key)) groups.set(key, { face, floor: w.floor, state: a.state, cols: [] });
+    groups.get(key).cols.push(number.get(w.id));
+  }
+  const faces = ["front", "right", "back", "left"];
+  const multi = new Set([...groups.values()].map((g) => g.face)).size > 1;
+  return [...groups.values()]
+    .sort((a, b) => faces.indexOf(a.face) - faces.indexOf(b.face) || b.floor - a.floor
+      || (a.state === "off" ? -1 : 1))
+    .map((g) => {
+      const cols = g.cols.sort((x, y) => x - y);
+      const side = multi ? `${SIDE_NAMES[g.face]}, ` : "";
+      const verb = g.state === "off" ? "off" : "dim";
+      return { text: `${side}Floor ${g.floor}: window${cols.length > 1 ? "s" : ""} ${cols.join(", ")}`, verb };
+    });
+}
+
+function showSwitchList(d) {
+  const lines = switchListLines(d);
+  const box = $("switchList");
+  box.hidden = !lines.length;
+  const ul = $("switchRows");
+  ul.innerHTML = "";
+  for (const l of lines) {
+    const li = document.createElement("li");
+    const tag = document.createElement("span");
+    tag.className = `switch-tag ${l.verb}`;
+    tag.textContent = l.verb === "off" ? "Off" : "Dim";
+    li.append(tag, l.text);
+    ul.appendChild(li);
+  }
+  const n = (d.actions || []).length;
+  $("switchCount").textContent = n ? `(${n})` : "";
+}
+
+async function copySwitchList() {
+  if (!lastDecision) return;
+  const name = (building && building.building) || "the building";
+  const text = [`Lights Out tonight at ${name}. Please switch these lights:`,
+    ...switchListLines(lastDecision).map((l) => `- ${l.verb === "off" ? "Off" : "Dim"}: ${l.text}`)].join("\n");
+  try {
+    await navigator.clipboard.writeText(text);
+    toast("List copied");
+  } catch (e) { toast("Could not copy the list"); }
 }
 
 async function speak(text) {
@@ -484,6 +552,7 @@ function wire() {
   $("decideBtn").addEventListener("click", decide);
   $("startOver").addEventListener("click", runAgain);
   $("replayBtn").addEventListener("click", () => lastDecision && speak(lastDecision.reason));
+  $("copyList").addEventListener("click", copySwitchList);
   $("debugToggle").addEventListener("change", showPhoto);
   $("whereForm").addEventListener("submit", submitLocation);
   $("whereChange").addEventListener("click", () => askForLocation(building && building.location ? building.location.address : ""));

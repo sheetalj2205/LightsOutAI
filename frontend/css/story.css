@@ -295,3 +295,13 @@ select {
   .step { padding: 4px; gap: 6px; }
   .impact-big span { font-size: 44px; }
 }
+
+/* Windows to switch off: floor and window numbers */
+.switch-list { background: var(--card-2); border-radius: 14px; padding: 12px 14px; }
+.switch-list summary { cursor: pointer; font-size: 14px; font-weight: 600; color: var(--text); }
+.switch-hint { margin: 6px 0 8px; font-size: 12px; color: var(--muted); }
+.switch-list ul { list-style: none; margin: 0 0 10px; padding: 0; display: grid; gap: 6px; max-height: 240px; overflow-y: auto; }
+.switch-list li { display: flex; align-items: baseline; gap: 8px; font-size: 13px; line-height: 1.4; }
+.switch-tag { flex: none; font-size: 11px; font-weight: 700; border-radius: 6px; padding: 1px 7px; }
+.switch-tag.off { background: var(--bad-soft); color: var(--bad); }
+.switch-tag.dim { background: var(--mid-soft); color: var(--mid); }
