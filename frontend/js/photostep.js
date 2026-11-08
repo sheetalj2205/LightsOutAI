@@ -22,6 +22,7 @@ export function initPhotoStep({ onAnalyzed, toast }) {
   let file = null;
   let sides = {};  // side -> File
   let timers = [];
+  let sample = false;  // the built-in sample building (Davis Hall)
 
   const showError = (msg) => { $("photoError").textContent = msg; $("photoError").hidden = !msg; };
   const phase = (p) => {
@@ -52,10 +53,11 @@ export function initPhotoStep({ onAnalyzed, toast }) {
     tile.querySelector("img").src = URL.createObjectURL(f);
   }
 
-  function setFile(f) {
+  function setFile(f, isSample = false) {
     if (!f) return;
     if (badImage(f)) return;
     file = f;
+    sample = isSample;
     showError("");
     $("photoPreview").src = URL.createObjectURL(f);
     $("photoPreview").hidden = false;
@@ -68,6 +70,7 @@ export function initPhotoStep({ onAnalyzed, toast }) {
 
   function reset() {
     file = null;
+    sample = false;
     SIDES.forEach((s) => setSide(s, null));
     timers.forEach(clearTimeout);
     $("photoForm").reset();
@@ -125,7 +128,7 @@ export function initPhotoStep({ onAnalyzed, toast }) {
       const wait = Math.max(0, 2 * STEP_MS - (performance.now() - started));
       setTimeout(() => {
         progress(3);
-        onAnalyzed(body);
+        onAnalyzed(body, { sample });
         setTimeout(() => showResult(body), 500);
       }, wait);
     } catch (e) {
@@ -147,5 +150,20 @@ export function initPhotoStep({ onAnalyzed, toast }) {
     tile.querySelector(".side-x").addEventListener("click", (e) => { e.preventDefault(); e.stopPropagation(); tile.querySelector("input").value = ""; setSide(side, null); });
   });
 
-  return { reset, showResult, pick: () => $("photoInput").click() };
+  // Load the Davis Hall photo shipped with the app and run it through the real pipeline.
+  async function useSample() {
+    reset();
+    try {
+      const r = await fetch("demo/davis-hall/photo.jpg");
+      if (!r.ok) throw new Error(r.status);
+      const blob = await r.blob();
+      setFile(new File([blob], "davis-hall.jpg", { type: blob.type || "image/jpeg" }), true);
+      $("photoName").value = "Davis Hall";
+      $("photoForm").requestSubmit();
+    } catch (e) {
+      showError("Couldn't load the sample photo. Try uploading your own.");
+    }
+  }
+
+  return { reset, showResult, useSample, pick: () => $("photoInput").click() };
 }

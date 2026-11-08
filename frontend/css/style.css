@@ -1,22 +1,23 @@
 /* Lights Out AI: dark night theme, big readable numbers */
 :root {
-  --bg: #070b16;
-  --panel: #0f1628;
-  --panel-2: #141d33;
-  --line: #22304f;
-  --text: #e8edf7;
-  --muted: #8d9bb8;
-  --warm: #ffd77a;
+  /* Same night-sky palette as theme.css, under this page's older names */
+  --bg: #080c20;
+  --panel: #10163a;
+  --panel-2: #161d48;
+  --line: rgba(255, 255, 255, .1);
+  --text: #eef0ff;
+  --muted: #9aa1c4;
+  --warm: #ffcf6e;
   --warm-glow: rgba(255, 205, 100, 0.55);
   --dim: #8a6f35;
   --off: #121a2c;
   --wall: #1b2236;
-  --good: #3ecf8e;
-  --mid: #f5a524;
-  --bad: #ff5468;
-  --accent: #6ea8ff;
-  --radius: 14px;
-  font-family: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --good: #34d399;
+  --mid: #fbbf24;
+  --bad: #ff7a7a;
+  --accent: #ffc45e;
+  --radius: 18px;
+  font-family: var(--sans);
 }
 
 * { box-sizing: border-box; }
@@ -33,10 +34,7 @@ h1, h2, h3 { margin: 0; }
   position: sticky; top: 0; z-index: 10;
 }
 .brand { display: flex; align-items: center; gap: 10px; }
-.brand .logo {
-  width: 30px; height: 30px; border-radius: 8px; display: grid; place-items: center;
-  background: #1a2440; border: 1px solid var(--line); font-size: 17px;
-}
+.brand .logo { width: 34px; height: 34px; flex: none; filter: drop-shadow(0 6px 16px rgba(75, 79, 224, .45)); }
 .brand h1 { font-size: 20px; letter-spacing: 0.2px; }
 .brand small { display: block; color: var(--muted); font-size: 12px; }
 .spacer { flex: 1; }
@@ -201,3 +199,8 @@ body.twin-page { display: flex; flex-direction: column; height: 100vh; overflow:
   padding: 12px 18px; font-size: 18px; max-width: min(900px, 90vw); text-align: center; display: none;
 }
 .twin-page .banner.show { display: block; }
+
+/* Card labels stay in the sans font; page titles use the serif from theme.css */
+.card h2 { font-family: var(--sans); font-weight: 700; }
+.btn.active { background: rgba(255, 196, 94, .12); }
+html:not(.debug) .debug-only { display: none !important; }

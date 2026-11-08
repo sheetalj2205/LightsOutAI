@@ -35,7 +35,8 @@
         <p class="lead">Lit windows at night pull migrating birds off course. Upload a photo of your building
           and AI turns off the lights that put birds at risk tonight.</p>
         <a class="btn primary" href="app.html">Try it with your building
-          <svg viewBox="0 0 24 24" class="ic"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a>
+          <svg viewBox="0 0 24 24" class="ic" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a>
+        <a class="text-link" href="app.html?sample=1">or watch it work on a sample building</a>
       </div>
       <div class="hero-art" aria-hidden="true">
         <svg id="heroBuilding" viewBox="0 0 360 440"></svg>
@@ -56,11 +57,11 @@
     <section class="example">
       <h2>Example: Davis Hall on a foggy night</h2>
       <div class="example-card">
-        <div id="demoCompare"><p class="loading">Loading…</p></div>
+        <div id="demoCompare" aria-busy="true"><div class="skel-pair"><span class="skel"></span><span class="skel"></span></div><span class="sr">Loading the example…</span></div>
         <div class="numbers">
-          <div><b id="demoDrop">–</b><span>fewer bird collisions (est.)</span></div>
-          <div><b id="demoChanged">–</b><span>lights off or dimmed</span></div>
-          <div><b id="demoUsd">–</b><span>saved per night</span></div>
+          <div><b id="demoDrop"><span class="skel skel-num"></span></b><span>fewer bird collisions (est.)</span></div>
+          <div><b id="demoChanged"><span class="skel skel-num"></span></b><span>lights off or dimmed</span></div>
+          <div><b id="demoUsd"><span class="skel skel-num"></span></b><span>saved per night</span></div>
         </div>
       </div>
     </section>

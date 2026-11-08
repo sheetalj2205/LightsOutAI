@@ -103,9 +103,11 @@ async function loadDemo() {
     demo = await r.json();
   } catch (e) {
     $("demoCompare").innerHTML = '<p class="loading">The example could not be loaded.</p>';
+    ["demoDrop", "demoChanged", "demoUsd"].forEach((id) => { $(id).textContent = "–"; });
     return;
   }
   // Play the lights-out animation when the example scrolls into view.
+  $("demoCompare").removeAttribute("aria-busy");
   showDemo(false);
   const io = new IntersectionObserver((entries) => {
     if (entries.some((e) => e.isIntersecting)) { showDemo(true); io.disconnect(); }

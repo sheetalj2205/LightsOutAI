@@ -102,6 +102,10 @@ export function createScene(container) {
   controls.autoRotateSpeed = 0.5;
   controls.maxPolarAngle = 1.45;
   controls.minPolarAngle = 0.35;
+  // Phones: a vertical swipe scrolls the page, a sideways drag rotates the building.
+  renderer.domElement.style.touchAction = "pan-y";
+  // Less motion: no slow spin for people who ask for reduced motion.
+  if (matchMedia("(prefers-reduced-motion: reduce)").matches) controls.autoRotateSpeed = 0;
   let idleTimer = null, userDragging = false;
   controls.addEventListener("start", () => { userDragging = true; controls.autoRotate = false; clearTimeout(idleTimer); });
   controls.addEventListener("end", () => {

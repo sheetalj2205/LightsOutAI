@@ -44,39 +44,52 @@
       <div class="name">Lights Out AI</div>
     </a>
     <div class="topbar-right">
-      <button type="button" class="btn small soft" id="newBtn"><svg class="ic"><use href="#i-plus"/></svg>New building</button>
-      <span class="status" id="status"><i></i><b id="statusText">Connecting…</b></span>
+      <span class="status" id="status" role="status" hidden><i></i><b id="statusText"></b></span>
+      <button type="button" class="btn small soft" id="newBtn" title="Start over with a new building"><svg class="ic"><use href="#i-plus"/></svg>New building</button>
     </div>
   </header>
 
   <nav class="steps" aria-label="Steps">
-    <button type="button" class="step" data-go="1"><span class="num">1</span><span><b>Photo</b><small>Your building</small></span></button>
-    <span class="step-line"><i></i></span>
-    <button type="button" class="step" data-go="2"><span class="num">2</span><span><b>Location</b><small>Tonight's forecast</small></span></button>
-    <span class="step-line"><i></i></span>
-    <button type="button" class="step" data-go="3"><span class="num">3</span><span><b>AI decides</b><small>Which lights go out</small></span></button>
-    <span class="step-line"><i></i></span>
-    <button type="button" class="step" data-go="4"><span class="num">4</span><span><b>Impact</b><small>Risk and savings</small></span></button>
+    <button type="button" class="step" data-go="1"><span class="num" aria-hidden="true">1</span><span><b>Photo</b><small>Your building</small></span></button>
+    <span class="step-line" aria-hidden="true"><i></i></span>
+    <button type="button" class="step" data-go="2"><span class="num" aria-hidden="true">2</span><span><b>Tonight</b><small>Forecast and AI decision</small></span></button>
+    <span class="step-line" aria-hidden="true"><i></i></span>
+    <button type="button" class="step" data-go="3"><span class="num" aria-hidden="true">3</span><span><b>Lights out</b><small>What changed and why</small></span></button>
   </nav>
 
-  <main class="stage">
-    <section class="viewer" aria-label="3D building">
+  <main class="stage" id="stage">
+    <section class="viewer" aria-label="Building view">
       <div id="scene"></div>
+
+      <!-- Before / after photos, shown over the 3D view -->
+      <div class="viewer-compare" id="compareView" hidden>
+        <div class="compare-inner">
+          <label class="switch" id="outlineSwitch"><input type="checkbox" id="debugToggle" /><span></span>Show detected windows</label>
+          <div id="compare"></div>
+        </div>
+      </div>
 
       <div class="empty" id="emptyState">
         <div class="empty-card">
           <span class="empty-icon"><svg class="ic lg"><use href="#i-building"/></svg></span>
           <h2>Start with a photo of your building</h2>
           <p>We find every window, build it in 3D, and decide which lights to turn off tonight.</p>
-          <button type="button" class="btn primary" id="emptyUpload"><svg class="ic"><use href="#i-upload"/></svg>Upload a photo</button>
+          <div class="empty-actions">
+            <button type="button" class="btn primary" id="emptyUpload"><svg class="ic"><use href="#i-upload"/></svg>Upload a photo</button>
+            <button type="button" class="btn" id="emptySample"><svg class="ic"><use href="#i-building"/></svg>Try a sample building</button>
+          </div>
         </div>
       </div>
 
       <div class="viewer-top">
         <span class="chip" id="buildingName" hidden></span>
+        <div class="view-tabs" id="viewTabs" role="tablist" aria-label="View" hidden>
+          <button type="button" role="tab" data-view="3d" aria-selected="true" class="active">3D model</button>
+          <button type="button" role="tab" data-view="photo" aria-selected="false">Before / after</button>
+        </div>
       </div>
       <div class="viewer-bottom">
-        <span class="caption">Drag to rotate</span>
+        <span class="caption" id="viewerCaption">Drag sideways to rotate</span>
         <div class="legend" id="legendLight" hidden>
           <span><i class="lit"></i>Lit</span><span><i class="dim"></i>Dimmed by AI</span><span><i class="off"></i>Off by AI</span>
         </div>
@@ -92,7 +105,7 @@
           <h2>Add photos of the building</h2>
           <p class="explain">Straight-on photos work best, day or night. Only the front is required.</p>
           <label class="drop" id="drop">
-            <input type="file" id="photoInput" accept="image/*" />
+            <input type="file" id="photoInput" accept="image/*" aria-label="Photo of the front of the building" />
             <img id="photoPreview" alt="" hidden />
             <span class="drop-hint" id="dropHint">
               <svg class="ic xl"><use href="#i-upload"/></svg>
@@ -103,15 +116,16 @@
           <div class="sides">
             <div class="sides-head"><b>More sides</b><small>optional · the AI checks windows on every side</small></div>
             <div class="side-row">
-              <label class="side-tile" data-side="right"><input type="file" accept="image/*" /><img alt="" /><span>Right side</span><button type="button" class="side-x" aria-label="Remove">×</button></label>
-              <label class="side-tile" data-side="back"><input type="file" accept="image/*" /><img alt="" /><span>Back</span><button type="button" class="side-x" aria-label="Remove">×</button></label>
-              <label class="side-tile" data-side="left"><input type="file" accept="image/*" /><img alt="" /><span>Left side</span><button type="button" class="side-x" aria-label="Remove">×</button></label>
+              <div class="side-tile" data-side="right"><label class="side-pick"><input type="file" accept="image/*" aria-label="Photo of the right side" /><img alt="" /><span>Right side</span></label><button type="button" class="side-x" aria-label="Remove the right side photo">×</button></div>
+              <div class="side-tile" data-side="back"><label class="side-pick"><input type="file" accept="image/*" aria-label="Photo of the back" /><img alt="" /><span>Back</span></label><button type="button" class="side-x" aria-label="Remove the back photo">×</button></div>
+              <div class="side-tile" data-side="left"><label class="side-pick"><input type="file" accept="image/*" aria-label="Photo of the left side" /><img alt="" /><span>Left side</span></label><button type="button" class="side-x" aria-label="Remove the left side photo">×</button></div>
             </div>
           </div>
           <label class="field"><span>Building name</span>
             <input id="photoName" type="text" maxlength="60" placeholder="e.g. Davis Hall" /></label>
-          <p class="form-error" id="photoError" hidden></p>
+          <p class="form-error" id="photoError" role="alert" hidden></p>
           <button type="submit" class="btn primary wide" id="photoBtn">Analyze photo<svg class="ic"><use href="#i-arrow"/></svg></button>
+          <p class="sample-line">No photo handy? <button type="button" class="link" id="sampleBtn">Try a sample building</button></p>
         </form>
 
         <ol class="progress" id="photoProgress" hidden>
@@ -127,20 +141,20 @@
             <p class="facts" id="resultFacts">–</p>
             <span class="pill" id="resultLights">–</span>
           </div>
-          <button type="button" class="btn primary wide" data-go="2">Continue to location<svg class="ic"><use href="#i-arrow"/></svg></button>
+          <button type="button" class="btn primary wide" data-go="2">Continue to tonight's forecast<svg class="ic"><use href="#i-arrow"/></svg></button>
           <button type="button" class="btn ghost" id="anotherPhoto">Use a different photo</button>
         </div>
       </div>
 
       <!-- Step 2: location + forecast -->
       <div class="pane" data-step="2">
-        <div class="eyebrow"><svg class="ic"><use href="#i-pin"/></svg>Step 2 · Location</div>
+        <div class="eyebrow"><svg class="ic"><use href="#i-pin"/></svg>Step 2 · Tonight</div>
         <h2 id="condSummary">Where is this building?</h2>
 
         <form class="where-form" id="whereForm">
           <label class="field"><span>Address</span>
-            <input id="whereInput" type="text" maxlength="160" placeholder="Street address, city, state" /></label>
-          <p class="form-error" id="whereError" hidden></p>
+            <input id="whereInput" type="text" maxlength="160" placeholder="Street address, city, state" autocomplete="street-address" /></label>
+          <p class="form-error" id="whereError" role="alert" hidden></p>
           <button type="submit" class="btn primary" id="whereBtn">Get tonight's forecast</button>
         </form>
 
@@ -158,13 +172,27 @@
           </div>
           <div class="tile">
             <div class="label">Sky danger</div>
-            <div class="value" id="skyDanger">–</div>
+            <div class="value word" id="skyDanger">–</div>
             <div class="bar"><span id="skyBar"></span></div>
+            <div class="hint" id="skyHint">fog and low cloud</div>
           </div>
           <div class="tile">
             <div class="label">Building risk now</div>
-            <div class="value" id="riskNow">–</div>
+            <div class="value word" id="riskNow">–</div>
             <div class="bar"><span id="riskNowBar"></span></div>
+            <div class="hint" id="riskHint">from its lit windows</div>
+          </div>
+        </div>
+        <div class="decide-box" id="decideBox" hidden>
+          <button type="button" class="btn primary huge" id="decideBtn">
+            <span class="when-idle"><svg class="ic"><use href="#i-spark"/></svg>Turn off the risky lights</span>
+            <span class="when-busy"><i class="spinner"></i>Checking every window…</span>
+          </button>
+          <p class="decide-note">AI picks which lights to turn off or dim, checked against published Lights Out
+            rules. The ground-floor lobby always stays on.</p>
+          <div class="form-error retry" id="decideError" role="alert" hidden>
+            <span id="decideErrorText"></span>
+            <button type="button" class="btn small" id="decideRetry"><svg class="ic"><use href="#i-redo"/></svg>Retry</button>
           </div>
         </div>
         <div class="why" id="whyBox" hidden>
@@ -174,27 +202,14 @@
         </div>
         <p class="ebird-line" id="ebirdLine" hidden></p>
         <p class="explain small">Birds migrate at night. Fog and low clouds push them lower, where lit windows pull them in.</p>
-        <button type="button" class="btn primary wide" data-go="3" id="nextBtn" disabled>Continue<svg class="ic"><use href="#i-arrow"/></svg></button>
+
       </div>
 
-      <!-- Step 3: AI decides -->
+      <!-- Step 3: lights out -->
       <div class="pane" data-step="3">
-        <div class="eyebrow"><svg class="ic"><use href="#i-spark"/></svg>Step 3 · AI decides</div>
-        <h2>Which lights should go out tonight?</h2>
-        <p class="explain">The AI weighs every window's risk against tonight's forecast and picks lights to turn
-          off or dim. The ground-floor lobby always stays on.</p>
-        <button type="button" class="btn primary huge" id="decideBtn">
-          <span class="when-idle"><svg class="ic"><use href="#i-spark"/></svg>Let the AI decide</span>
-          <span class="when-busy"><i class="spinner"></i>Thinking…</span>
-        </button>
-        <div class="ai-chain">Gemini · backup BullsAI (UB) · rule-based safety net</div>
-      </div>
-
-      <!-- Step 4: impact -->
-      <div class="pane" data-step="4">
-        <div class="eyebrow"><svg class="ic"><use href="#i-chart"/></svg>Step 4 · Impact</div>
+        <div class="eyebrow"><svg class="ic"><use href="#i-chart"/></svg>Step 3 · Lights out</div>
         <div class="impact">
-          <div class="impact-big"><span id="riskDrop">–</span><small>fewer bird collisions tonight (estimate)</small></div>
+          <div class="impact-big"><span id="riskDrop">–</span><small id="riskDropLabel">fewer bird collisions expected tonight</small></div>
         </div>
         <p class="rule-line" id="ruleLine"></p>
         <div class="tiles">
@@ -211,24 +226,24 @@
         <details class="switch-list" id="switchList" open hidden>
           <summary>Windows to switch off <span id="switchCount"></span></summary>
           <p class="switch-hint">Floor 1 is the ground floor. Window numbers count from the left, as seen in the photo.</p>
-          <ul id="switchRows"></ul>
-          <button type="button" class="btn small" id="copyList">Copy list</button>
+          <ul id="switchRows" aria-live="polite"></ul>
+          <div class="share-row">
+            <button type="button" class="btn small" id="copyList">Copy list</button>
+            <button type="button" class="btn small" id="printList">Print</button>
+            <a class="btn small" id="emailList" href="#">Email to facilities</a>
+          </div>
         </details>
-        <button type="button" class="btn ghost" id="startOver"><svg class="ic"><use href="#i-redo"/></svg>Run again</button>
+        <div class="form-error retry" id="resultError" role="alert" hidden>
+          <span id="resultErrorText"></span>
+          <button type="button" class="btn small" id="resultRetry"><svg class="ic"><use href="#i-redo"/></svg>Retry</button>
+        </div>
+        <button type="button" class="btn ghost" id="startOver"><svg class="ic"><use href="#i-redo"/></svg>Re-run tonight's decision</button>
       </div>
     </aside>
   </main>
 
-  <section class="card photo" id="photoSection" hidden>
-    <div class="photo-head">
-      <div>
-        <div class="eyebrow">The real building</div>
-        <h2>Before and after the AI acts</h2>
-      </div>
-      <label class="switch" id="outlineSwitch"><input type="checkbox" id="debugToggle" /><span></span>Show detected windows</label>
-    </div>
-    <div id="compare"></div>
-  </section>
+  <!-- Filled in just before printing the switch-off list -->
+  <section class="print-sheet" id="printSheet" aria-hidden="true"></section>
 
   <div class="toast" id="toast" role="status"></div>
 
