@@ -12,7 +12,7 @@ from typing import Optional
 
 from pydantic import BaseModel, ValidationError
 
-from . import config, risk
+from . import config, risk, rules
 from .models import Action, Conditions, Window
 
 log = logging.getLogger("lightsout.decide")
@@ -34,8 +34,10 @@ strong migration. Choose which windows to turn OFF or DIM tonight to cut collisi
 
 Rules:
 - Never change windows on these floors (essential lobby/safety lighting): {essential}
-- Prefer turning off the highest-risk windows; dim medium-risk ones if useful.
-- On a low-risk night, change only a few windows. On a high-risk night, be aggressive.
+- Tonight's rule ({rule_source}): {rule_text}
+  Here that means turning OFF at least {target} of the {changeable} lit windows you may change,
+  highest risk first (risk = how far the window is seen, how bright and how white its light is).
+  You may also dim other windows.
 - Only use window ids from the list.
 
 Tonight's conditions:
@@ -46,8 +48,8 @@ Windows (risk is 0-1, higher = more dangerous):
 
 Reply with JSON only:
 {{"actions": [{{"id": <window id>, "state": "off" or "dim"}}],
-  "reason": "<one or two short plain-English sentences for building staff, mentioning the
-   weather, migration level, how many windows and which floors>"}}"""
+  "reason": "<one or two short plain-English sentences for building staff: the weather and migration
+   level, how many windows and which floors, and why those windows (e.g. highest, brightest, white light)>"}}"""
 
 
 def _floors_text(floors: list[int]) -> str:
@@ -61,16 +63,46 @@ def _floors_text(floors: list[int]) -> str:
     return "floors " + ", ".join(map(str, floors[:-1])) + f" and {floors[-1]}"
 
 
-def fallback_decision(windows: list[Window], cond: Conditions) -> tuple[list[Action], str]:
-    """Turn off the top-risk windows; how many depends on how dangerous the night is."""
+def _candidates(windows: list[Window], cond: Conditions) -> list[Window]:
+    """Lit windows the AI may change, highest risk first."""
     scored = risk.score_windows(windows, cond)
-    candidates = sorted((w for w in scored if w.state != "off" and w.floor not in config.ESSENTIAL_FLOORS),
-                        key=lambda w: w.risk, reverse=True)
-    night = risk.MIGRATION_FACTOR[cond.migration_level] * risk.sky_factor(cond.sky_danger)
-    share_off = 0.15 + 0.65 * night  # 15% on a calm night up to 80% on the worst night
-    n_off = round(len(candidates) * share_off)
+    return sorted((w for w in scored if w.state != "off" and w.floor not in config.ESSENTIAL_FLOORS),
+                  key=lambda w: w.risk, reverse=True)
+
+
+def target_off(windows: list[Window], cond: Conditions) -> int:
+    """Fewest windows to turn off to meet tonight's rule (see rules.py)."""
+    return len(rules.minimum_plan(cond.migration_level, _candidates(windows, cond), windows))
+
+
+def _top_up(actions: list[Action], windows: list[Window], cond: Conditions) -> tuple[list[Action], int, int]:
+    """Make sure tonight's rule is met: turn off (or upgrade dims to off) the highest-risk windows
+    the AI left on until it is. Returns (actions, how many were changed, target)."""
+    level = cond.migration_level
+    candidates = _candidates(windows, cond)
+    state = {a.id: a.state for a in actions}
+    changed = 0
+    for w in candidates:
+        if rules.rule_met(level, candidates, windows, {i for i, st in state.items() if st == "off"}):
+            break
+        if state.get(w.id) != "off":
+            state[w.id] = "off"
+            changed += 1
+    out = [Action(id=a.id, state=state[a.id]) for a in actions]
+    known = {a.id for a in actions}
+    out += [Action(id=i, state=st) for i, st in state.items() if i not in known]
+    return out, changed, target_off(windows, cond)
+
+
+def fallback_decision(windows: list[Window], cond: Conditions) -> tuple[list[Action], str]:
+    """Tonight's rule with the highest-risk windows first; on a light night only dim the brightest."""
+    candidates = _candidates(windows, cond)
+    n_off = target_off(windows, cond)
     off, rest = candidates[:n_off], candidates[n_off:]
-    dim = [w for w in rest if w.risk >= 0.25][: max(1, len(rest) // 3)] if rest else []
+    if cond.migration_level == "low":
+        dim = rest[: max(1, len(rest) // 10)] if rest else []  # the brightest ~10%
+    else:
+        dim = [w for w in rest if w.risk >= 0.25][: max(1, len(rest) // 3)] if rest else []
     actions = [Action(id=w.id, state="off") for w in off] + [Action(id=w.id, state="dim") for w in dim]
 
     sky = [x for x, on in (("fog", cond.fog), ("rain", cond.rain),
@@ -90,11 +122,18 @@ def fallback_decision(windows: list[Window], cond: Conditions) -> tuple[list[Act
 
 def _build_prompt(windows: list[Window], cond: Conditions) -> str:
     scored = risk.score_windows(windows, cond)
-    win_rows = [{"id": w.id, "floor": w.floor, "col": w.col, "state": w.state,
-                 "brightness": w.brightness, "color": w.color, "risk": w.risk} for w in scored]
+    changeable = len(_candidates(windows, cond))
+    # Compact rows keep the prompt short for big glass buildings (100+ windows).
+    many_sides = len({w.face for w in scored}) > 1
+    win_rows = [{"id": w.id, **({"side": w.face} if many_sides else {}), "floor": w.floor, "col": w.col,
+                 "state": w.state, "bright": round(w.brightness, 2), "color": w.color, "risk": round(w.risk, 2)}
+                for w in scored]
+    rule = rules.rule_for(cond.migration_level)
     return PROMPT.format(essential=sorted(config.ESSENTIAL_FLOORS),
+                         target=target_off(windows, cond), changeable=changeable,
+                         rule_text=rule["text"], rule_source=(rule["source"] or {}).get("name", "light night"),
                          conditions=cond.model_dump_json(indent=1),
-                         windows=json.dumps(win_rows))
+                         windows=json.dumps(win_rows, separators=(",", ":")))
 
 
 def _parse_answer(text: str) -> tuple[list[Action], str]:
@@ -134,7 +173,7 @@ def bullsai_ready() -> bool:
     return bool(config.BULLSAI_API_KEY and config.BULLSAI_BASE_URL and config.BULLSAI_MODEL)
 
 
-def bullsai_chat(prompt: str, timeout: float = 15) -> str:
+def bullsai_chat(prompt: str, timeout: float = 35) -> str:
     """One chat call to the BullsAI Model Hub (OpenAI-compatible /chat/completions)."""
     import httpx
 
@@ -182,7 +221,7 @@ _answers: dict[str, tuple[float, list, str, str]] = {}
 
 
 def _question_key(windows: list[Window], cond: Conditions, photo: Optional[bytes]) -> str:
-    wins = sorted((w.id, w.floor, w.col, w.state, round(w.brightness, 2), w.color) for w in windows)
+    wins = sorted((w.id, w.face, w.floor, w.col, w.state, round(w.brightness, 2), w.color) for w in windows)
     sky = (cond.location, cond.migration_level, round(cond.sky_danger, 2), cond.fog, cond.rain,
            cond.sky_cover // 10, cond.wind_dir, cond.scenario)
     h = hashlib.sha1(json.dumps([wins, sky]).encode())
@@ -209,7 +248,10 @@ def decide(windows: list[Window], cond: Conditions, photo: Optional[bytes] = Non
     for name, run in attempts:
         try:
             actions, reason = run()
-            actions = _clean(actions, windows)
+            actions, added, target = _top_up(_clean(actions, windows), windows, cond)
+            if added:
+                reason = (f"{reason} To meet tonight's rule, {added} more of the highest-risk windows "
+                          f"were turned off ({target} in total needed).").strip()
             source = name
             break
         except (ValidationError, ValueError) as exc:
@@ -230,10 +272,13 @@ def _result(windows: list[Window], cond: Conditions, actions: list[Action], reas
     new_windows = risk.score_windows(
         [w.model_copy(update={"state": changes.get(w.id, w.state)}) for w in windows], cond)
 
+    after_windows = [w.model_copy(update={"state": changes.get(w.id, w.state)}) for w in windows]
     watts_saved = sum(WATTS_PER_WINDOW * (1.0 if s == "off" else 0.5) for s in changes.values())
     kwh = round(watts_saved * HOURS_PER_NIGHT / 1000, 2)
     return {
         "actions": actions, "reason": reason, "source": source,
         "risk_before": before, "risk_after": after, "windows": new_windows,
         "energy_saved_kwh": kwh, "money_saved_usd": round(kwh * USD_PER_KWH, 2),
+        "rule": rules.rule_for(cond.migration_level),
+        "estimate": rules.collision_estimate(windows, after_windows),
     }

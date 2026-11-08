@@ -1,15 +1,16 @@
 /* Lights Out AI: the 4-step page.
    1 Photo -> 2 Location (tonight's forecast) -> 3 AI decides -> 4 Impact.
-   Talks to the backend through Sakshi's window.LO (js/api.js), draws with scene3d.js. */
+   Talks to the backend through Sakshi's window.LO (js/api.js); draws the 3D scene with scene3d.js
+   (the building's real photo on a 3D block). */
 import { createScene } from "./scene3d.js";
+import { createPhotoView } from "./photoview.js";
 import { initPhotoStep } from "./photostep.js";
+import { renderCompare } from "./compare.js";
 
 const LO = window.LO;
 const $ = (id) => document.getElementById(id);
 const AI_NAMES = { gemini: "Decided by Gemini", bullsai: "Decided by BullsAI (UB)", fallback: "Rule-based safety net" };
 const WAVE_GAP = 80;            // ms between windows, top floor first
-const SAMPLE = "Demo Hall";     // generated sample building, only on request
-const KEEP = "lightsout_building";
 
 let view = null;          // 3D scene, or the flat fallback
 let building = null;      // current building summary (null = no building yet)
@@ -30,8 +31,6 @@ function toast(msg, ms = 3200) {
 }
 const score = (r) => Math.round((r || 0) * 100);
 const bust = (u) => (u ? `${LO.url(u)}?t=${Date.now()}` : "");
-const remember = (name) => { try { name ? localStorage.setItem(KEEP, name) : localStorage.removeItem(KEEP); } catch (e) { /* storage blocked */ } };
-const remembered = () => { try { return localStorage.getItem(KEEP); } catch (e) { return null; } };
 
 function animateNumber(el, to, fmt, ms = 1200) {
   const start = performance.now();
@@ -49,43 +48,12 @@ function fmtTime(iso) {
 }
 
 // ---------------------------------------------------------------- viewer
-function flatFallback(container) {
-  const grid = document.createElement("div");
-  grid.className = "flat";
-  container.appendChild(grid);
-  const cells = new Map();
-  return {
-    setBuilding(b) {
-      grid.hidden = false;
-      grid.innerHTML = "";
-      cells.clear();
-      grid.style.gridTemplateColumns = `repeat(${b.cols}, 1fr)`;
-      grid.style.gridTemplateRows = `repeat(${b.floors}, 1fr)`;
-      const byCell = new Map(b.windows.map((w) => [`${w.floor}:${w.col}`, w]));
-      for (let f = b.floors; f >= 1; f--) {
-        for (let c = 1; c <= b.cols; c++) {
-          const i = document.createElement("i");
-          const w = byCell.get(`${f}:${c}`);
-          if (w) { i.className = w.state; cells.set(w.id, i); }
-          grid.appendChild(i);
-        }
-      }
-    },
-    setEmpty() { grid.hidden = true; },
-    setWindow(id, state) { const i = cells.get(id); if (i) i.className = state; },
-    setWindows(ws) { ws.forEach((w) => this.setWindow(w.id, w.state)); },
-    setRiskView() {},
-    setBirdMode() {},
-    thinking() {},
-  };
-}
-
 function initViewer() {
   try {
     view = createScene($("scene"));
   } catch (e) {
-    console.warn("3D not available, using the flat building", e);
-    view = flatFallback($("scene"));
+    console.warn("3D not available, showing the photo", e);  // no WebGL: the real photo with its lights
+    view = createPhotoView($("scene"));
   }
 }
 
@@ -96,15 +64,13 @@ function sameShape(a, b) {
 function setChrome(hasBuilding) {
   $("emptyState").hidden = hasBuilding;
   $("buildingName").hidden = !hasBuilding;
-  $("riskSwitch").hidden = !hasBuilding || view.setRiskView.length === 0;
-  $("legendLight").hidden = !hasBuilding || $("riskToggle").checked;
-  $("legendRisk").classList.toggle("hidden", !hasBuilding || !$("riskToggle").checked);
+  $("legendLight").hidden = !hasBuilding;
 }
 
 function applyBuilding(b, opts = {}) {
   clearWave();
   if (sameShape(building, b) && !opts.rise) view.setWindows(b.windows);
-  else view.setBuilding(b, opts);
+  else view.setBuilding({ ...b, photos: photosOf(b) }, opts);
   view.setBirdMode(lastDecision ? "safe" : "attracted");
   building = b;
   setChrome(true);
@@ -120,6 +86,17 @@ function applyBuilding(b, opts = {}) {
   }
   setRiskNow(b.risk);
   showPhoto();
+}
+
+const SIDE_NAMES = { front: "Front", right: "Right side", back: "Back", left: "Left side" };
+
+// Photo of each side: {front: {photo, image_width, image_height, lights}, right: ...}
+function photosOf(b) {
+  const faces = b.faces && Object.keys(b.faces).length ? b.faces
+    : (b.photo_url ? { front: { photo_url: b.photo_url, image_width: b.image_width, image_height: b.image_height, lights: b.lights } } : {});
+  const out = {};
+  for (const [face, f] of Object.entries(faces)) out[face] = { ...f, photo: bust(f.photo_url) };
+  return out;
 }
 
 function clearWave() {
@@ -158,21 +135,7 @@ function startEmpty() {
   $("photoSection").hidden = true;
   askForLocation();
   photo.reset();
-  remember(null);
-  LO.api().buildings().then((l) => fillBuildings(l, null)).catch(() => {});
   goTo(1);
-}
-
-async function openBuilding(name, { rise = true } = {}) {
-  const b = await LO.api().select(name);
-  lastDecision = null;
-  building = null;
-  applyBuilding(b, { rise });
-  photo.showResult(b);
-  remember(b.building);
-  fillBuildings(await LO.api().buildings().catch(() => null), b.building);
-  await loadForecast(b);
-  goTo(2);
 }
 
 // ---------------------------------------------------------------- step 1 result
@@ -180,8 +143,6 @@ async function photoAnalyzed(b) {
   lastDecision = null;
   building = null;
   applyBuilding(b, { rise: true });
-  remember(b.building);
-  fillBuildings(await LO.api().buildings().catch(() => null), b.building);
   if (b.conditions) showConditions(b.conditions);
   else askForLocation();
 }
@@ -346,13 +307,14 @@ async function decide() {
   btn.disabled = true;
   view.thinking(true);
   try {
-    const d = await LO.api().decide();
+    const d = await LO.api().decide(building.building);
     lastDecision = d;
     view.thinking(false);
     const waveMs = playWave(d.actions || [], d.windows);
     // Birds stay trapped while the lights click off, then fly free.
     waveTimers.push(setTimeout(() => view.setBirdMode("safe"), waveMs + 600));
     showDecision(d);
+    showPhoto();
     goTo(4);
     speak(d.reason);
   } catch (e) {
@@ -367,29 +329,48 @@ async function decide() {
 }
 
 // ---------------------------------------------------------------- step 4: impact
+function link(text, url) {
+  const a = document.createElement("a");
+  a.href = url;
+  a.target = "_blank";
+  a.rel = "noopener";
+  a.textContent = `${text} ↗`;
+  return a;
+}
+
 function showDecision(d) {
-  const before = score(d.risk_before), after = score(d.risk_after);
-  const drop = before > 0 ? Math.round((1 - after / before) * 100) : 0;
-  animateNumber($("riskDrop"), drop, (v) => `−${Math.round(v)}%`);
-  animateNumber($("riskBefore"), before, (v) => Math.round(v));
-  animateNumber($("riskAfter"), after, (v) => Math.round(v));
-  const scale = Math.max(before, 1);
-  $("barBefore").style.width = "0";
-  $("barAfter").style.width = "0";
-  requestAnimationFrame(() => {
-    $("barBefore").style.width = `${(before / scale) * 100}%`;
-    $("barAfter").style.width = `${(after / scale) * 100}%`;
-  });
-  const acts = d.actions || [];
-  const offs = acts.filter((a) => a.state === "off").length;
-  $("countOff").textContent = `${offs} / ${acts.length - offs}`;
+  const est = d.estimate || {};
+  const sign = est.at_least ? "≥" : "−";  // "at least" when more than half the lit area went dark
+  animateNumber($("riskDrop"), Math.round((est.reduction || 0) * 100), (v) => `${sign}${Math.round(v)}%`);
+  animateNumber($("areaOff"), Math.round((est.lit_area_off || 0) * 100), (v) => `${Math.round(v)}%`);
   animateNumber($("kwh"), d.energy_saved_kwh || 0, (v) => `${v.toFixed(1)} kWh`);
   animateNumber($("usd"), d.money_saved_usd || 0, (v) => `$${v.toFixed(2)}`);
+
+  // Tonight's rule and where it comes from.
+  const rule = d.rule || {};
+  const line = $("ruleLine");
+  line.innerHTML = "";
+  if (rule.text) {
+    const b = document.createElement("b");
+    b.textContent = "Tonight's rule: ";
+    line.append(b, rule.text, " ");
+    if (rule.source) line.append(link(rule.source.name, rule.source.url));
+  }
+  line.hidden = !rule.text;
+
+  // How the collision estimate is made.
+  const es = $("estimateSource");
+  es.innerHTML = "";
+  if (est.source) {
+    es.append(`Estimate: halving a building's lit window area cut bird collisions ${est.halving_factor}× in ${est.season} `
+      + "(21 years of data at one Chicago building). ", link(est.source.name, est.source.url));
+  }
+  es.hidden = !est.source;
+
   $("reason").textContent = d.reason || "";
   const src = $("source");
   src.textContent = AI_NAMES[d.source] || d.source || "";
   src.className = `source ${d.source === "fallback" ? "fallback" : ""}`;
-  if (d.after_url) { $("imgAfter").src = bust(d.after_url); $("afterTag").textContent = "After the AI acts"; }
 }
 
 async function speak(text) {
@@ -399,7 +380,7 @@ async function speak(text) {
 async function runAgain() {
   clearWave();
   try {
-    const b = await LO.api().reset();
+    const b = await LO.api().reset(building && building.building);
     lastDecision = null;
     applyBuilding(b);
     view.setBirdMode("attracted");
@@ -412,24 +393,34 @@ function showPhoto() {
   const sec = $("photoSection");
   if (!building || !building.photo_url) { sec.hidden = true; return; }
   sec.hidden = false;
-  const simulated = building.lights === "simulated";
-  $("compare").classList.toggle("single", simulated);
-  $("debugToggle").closest("label").classList.toggle("hidden", simulated);
-  if (simulated) {
-    $("imgBefore").src = bust(building.debug_url || building.photo_url);
-    $("beforeTag").textContent = "Floors and windows found · tonight's lights simulated (day photo)";
-    return;
+  const box = $("compare");
+  box.innerHTML = "";
+  const photos = photosOf(building);
+  const multi = Object.keys(photos).length > 1;
+  for (const face of ["front", "right", "back", "left"]) {
+    const f = photos[face];
+    if (!f) continue;
+    const block = document.createElement("div");
+    block.className = "face-block";
+    if (multi) {
+      const title = document.createElement("h3");
+      title.className = "face-title";
+      title.textContent = SIDE_NAMES[face];
+      block.appendChild(title);
+    }
+    const inner = document.createElement("div");
+    block.appendChild(inner);
+    box.appendChild(block);
+    const ws = (building.windows || []).filter((w) => (w.face || "front") === face);
+    const ids = new Set(ws.map((w) => w.id));
+    renderCompare(inner, {
+      photo: f.photo, width: f.image_width, height: f.image_height, windows: ws,
+      actions: lastDecision ? (lastDecision.actions || []).filter((a) => ids.has(a.id)) : null,
+      simulated: f.lights === "simulated",
+      outlines: $("debugToggle").checked,
+      animate: !!lastDecision,
+    });
   }
-  $("beforeTag").textContent = "Before";
-  const before = $("debugToggle").checked && building.debug_url ? building.debug_url : building.photo_url;
-  $("imgBefore").src = bust(before);
-  if (building.after_url) { $("imgAfter").src = bust(building.after_url); $("afterTag").textContent = "After the AI acts"; }
-  else { $("imgAfter").src = bust(building.photo_url); $("afterTag").textContent = "After: run step 3"; }
-}
-
-function setSlider(pct) {
-  $("afterClip").style.clipPath = `inset(0 0 0 ${pct}%)`;
-  $("handle").style.left = `${pct}%`;
 }
 
 // ---------------------------------------------------------------- top bar
@@ -438,40 +429,21 @@ function setStatus(kind, text) {
   $("statusText").textContent = text;
 }
 
-function fillBuildings(list, current) {
-  const sel = $("buildingSelect");
-  sel.innerHTML = "";
-  const names = (list && list.buildings ? list.buildings.map((b) => b.building) : []).filter(Boolean);
-  if (!current) {
-    const ph = document.createElement("option");
-    ph.textContent = "Switch building…";
-    ph.value = "";
-    ph.disabled = ph.selected = true;
-    sel.appendChild(ph);
-  }
-  for (const name of names) {
-    const o = document.createElement("option");
-    o.value = o.textContent = name;
-    o.selected = name === current;
-    sel.appendChild(o);
-  }
-  sel.closest("label").classList.toggle("hidden", names.length < (current ? 2 : 1));
-}
-
 // ---------------------------------------------------------------- loading + live updates
+// Every visit starts fresh: no earlier buildings or results are shown.
 async function loadStart() {
-  const list = await LO.api().buildings();
-  fillBuildings(list, null);
-  const saved = remembered();
-  if (saved && list.buildings.some((b) => b.building === saved)) await openBuilding(saved, { rise: false });
-  else startEmpty();
+  await LO.api().conditions().catch((e) => { if (e instanceof TypeError) throw e; });  // backend reachable?
+  startEmpty();
 }
 
 const isMine = (msg) => building && msg.building === building.building;
 
 function connectLive() {
   socket = LO.connectSocket({
-    status: (ok) => { if (!LO.fake) setStatus(ok ? "live" : "off", ok ? "Live" : "Offline · retrying"); },
+    status: (ok) => {
+      if (ok && LO.fake) { setFake(false); return; }  // server is back: leave the offline data
+      if (!LO.fake) setStatus(ok ? "live" : "off", ok ? "Live" : "Offline · retrying");
+    },
     building: (msg) => { if (!LO.fake && !deciding && isMine(msg)) applyBuilding(msg); },
     command: (msg) => { if (!LO.fake && building) view.setWindow(msg.id, msg.state); },
     conditions: (msg) => { if (!LO.fake && building && building.location && msg.location) showConditions(msg); },
@@ -480,6 +452,7 @@ function connectLive() {
       if (LO.fake || deciding || !isMine(msg)) return;
       lastDecision = msg;
       showDecision(msg);
+      showPhoto();
       goTo(4);
       setTimeout(() => view.setBirdMode("safe"), ((msg.actions || []).length * WAVE_GAP) + 600);
     },
@@ -488,7 +461,6 @@ function connectLive() {
 
 async function setFake(on) {
   LO.fake = on;
-  $("fakeBtn").textContent = `Offline demo data: ${on ? "on" : "off"}`;
   lastDecision = null;
   try {
     if (on) {
@@ -512,29 +484,12 @@ function wire() {
   $("decideBtn").addEventListener("click", decide);
   $("startOver").addEventListener("click", runAgain);
   $("replayBtn").addEventListener("click", () => lastDecision && speak(lastDecision.reason));
-  $("riskToggle").addEventListener("change", (e) => {
-    view.setRiskView(e.target.checked);
-    $("legendLight").hidden = e.target.checked;
-    $("legendRisk").classList.toggle("hidden", !e.target.checked);
-  });
   $("debugToggle").addEventListener("change", showPhoto);
   $("whereForm").addEventListener("submit", submitLocation);
   $("whereChange").addEventListener("click", () => askForLocation(building && building.location ? building.location.address : ""));
-  $("slider").addEventListener("input", (e) => setSlider(e.target.value));
   $("newBtn").addEventListener("click", () => { if (LO.fake) setFake(false); else startEmpty(); });
   $("anotherPhoto").addEventListener("click", startEmpty);
   $("emptyUpload").addEventListener("click", () => { goTo(1); photo.pick(); });
-  const sample = async () => {
-    $("sampleMenuBtn").closest("details").open = false;
-    try { await openBuilding(SAMPLE); toast("Sample building loaded. Add its address to get tonight's forecast."); }
-    catch (e) { toast("The sample building isn't available on this server."); }
-  };
-  $("sampleBtn").addEventListener("click", sample);
-  $("sampleMenuBtn").addEventListener("click", sample);
-  $("buildingSelect").addEventListener("change", (e) => openBuilding(e.target.value).catch((err) => toast(`Could not switch building: ${err.message}`)));
-  $("fakeBtn").addEventListener("click", () => { $("fakeBtn").closest("details").open = false; setFake(!LO.fake); });
-  $("docsLink").href = LO.url("/docs");
-  setSlider(50);
 }
 
 async function main() {

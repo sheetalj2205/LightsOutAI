@@ -4,7 +4,8 @@
        .venv/bin/python scripts/run_photos.py tune
        .venv/bin/python scripts/run_photos.py tune --thresholds 160 180 200 220
 
-2) Save the best photo of a building for the demo (loaded automatically on server start):
+2) Save the best photo of a building (writes output/<name>/; the server no longer reloads these,
+   use scripts/make_demo.py for the landing-page demo):
        .venv/bin/python scripts/run_photos.py save "Davis Hall" ../photos/davis_1910.jpg --threshold 190 \
            --address "Davis Hall, Buffalo, NY"
 

@@ -21,6 +21,7 @@ class Window(BaseModel):
     brightness: float = Field(ge=0, le=1)
     color: str = "white"
     risk: float = Field(default=0.0, ge=0, le=1)
+    face: str = "front"  # which side of the building: front, right, back or left
 
 
 class Conditions(BaseModel):

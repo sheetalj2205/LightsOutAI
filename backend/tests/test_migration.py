@@ -33,6 +33,16 @@ def test_ebird_counts_night_migrants():
     assert s["species_total"] == 4 and s["migrant_species"] == 3 and "Rock Pigeon" not in s["examples"]
 
 
+def test_ebird_skips_year_round_residents():
+    # Same name words as migrants ("wren", "sparrow", "nuthatch"), but these stay in Buffalo all year.
+    residents = ["Carolina Wren", "House Sparrow", "Song Sparrow", "White-breasted Nuthatch", "American Robin"]
+    migrants = ["Winter Wren", "White-throated Sparrow", "Red-breasted Nuthatch", "Brown Creeper",
+                "Dark-eyed Junco", "Black-throated Blue Warbler", "Red-eyed Vireo", "Least Flycatcher"]
+    s = ebird.summarize([{"comName": n} for n in residents + migrants])
+    assert s["migrant_species"] == len(migrants)
+    assert not set(residents) & set(s["examples"])
+
+
 def test_conditions_carry_migration_and_ebird(monkeypatch):
     monkeypatch.setattr(config, "EBIRD_API_KEY", "k")
 

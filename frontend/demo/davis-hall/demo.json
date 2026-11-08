@@ -1,0 +1,818 @@
+{
+ "building": "Davis Hall",
+ "place": "Town of Amherst, New York",
+ "photo": "demo/davis-hall/photo.jpg",
+ "image_width": 1254,
+ "image_height": 1254,
+ "floors": 6,
+ "cols": 10,
+ "windows": [
+  {
+   "id": 2,
+   "floor": 1,
+   "col": 2,
+   "x": 359,
+   "y": 1043,
+   "w": 27,
+   "h": 64,
+   "state": "on",
+   "brightness": 0.793,
+   "color": "yellow",
+   "risk": 0.369,
+   "face": "front"
+  },
+  {
+   "id": 3,
+   "floor": 1,
+   "col": 2,
+   "x": 360,
+   "y": 1019,
+   "w": 62,
+   "h": 24,
+   "state": "on",
+   "brightness": 0.774,
+   "color": "orange",
+   "risk": 0.336,
+   "face": "front"
+  },
+  {
+   "id": 4,
+   "floor": 1,
+   "col": 2,
+   "x": 389,
+   "y": 1046,
+   "w": 30,
+   "h": 60,
+   "state": "on",
+   "brightness": 0.847,
+   "color": "yellow",
+   "risk": 0.394,
+   "face": "front"
+  },
+  {
+   "id": 5,
+   "floor": 1,
+   "col": 2,
+   "x": 394,
+   "y": 1110,
+   "w": 28,
+   "h": 11,
+   "state": "on",
+   "brightness": 0.787,
+   "color": "yellow",
+   "risk": 0.366,
+   "face": "front"
+  },
+  {
+   "id": 6,
+   "floor": 1,
+   "col": 3,
+   "x": 430,
+   "y": 1027,
+   "w": 45,
+   "h": 107,
+   "state": "on",
+   "brightness": 0.77,
+   "color": "orange",
+   "risk": 0.334,
+   "face": "front"
+  },
+  {
+   "id": 7,
+   "floor": 1,
+   "col": 4,
+   "x": 500,
+   "y": 1051,
+   "w": 60,
+   "h": 91,
+   "state": "on",
+   "brightness": 0.763,
+   "color": "orange",
+   "risk": 0.331,
+   "face": "front"
+  },
+  {
+   "id": 8,
+   "floor": 1,
+   "col": 5,
+   "x": 568,
+   "y": 1050,
+   "w": 61,
+   "h": 90,
+   "state": "on",
+   "brightness": 0.776,
+   "color": "orange",
+   "risk": 0.337,
+   "face": "front"
+  },
+  {
+   "id": 9,
+   "floor": 1,
+   "col": 6,
+   "x": 656,
+   "y": 1023,
+   "w": 47,
+   "h": 148,
+   "state": "on",
+   "brightness": 0.804,
+   "color": "yellow",
+   "risk": 0.374,
+   "face": "front"
+  },
+  {
+   "id": 10,
+   "floor": 1,
+   "col": 7,
+   "x": 710,
+   "y": 1018,
+   "w": 74,
+   "h": 98,
+   "state": "on",
+   "brightness": 0.798,
+   "color": "yellow",
+   "risk": 0.371,
+   "face": "front"
+  },
+  {
+   "id": 11,
+   "floor": 1,
+   "col": 10,
+   "x": 876,
+   "y": 1043,
+   "w": 22,
+   "h": 102,
+   "state": "on",
+   "brightness": 0.773,
+   "color": "orange",
+   "risk": 0.335,
+   "face": "front"
+  },
+  {
+   "id": 12,
+   "floor": 2,
+   "col": 2,
+   "x": 386,
+   "y": 869,
+   "w": 41,
+   "h": 94,
+   "state": "on",
+   "brightness": 0.729,
+   "color": "orange",
+   "risk": 0.348,
+   "face": "front"
+  },
+  {
+   "id": 13,
+   "floor": 2,
+   "col": 3,
+   "x": 435,
+   "y": 866,
+   "w": 71,
+   "h": 97,
+   "state": "on",
+   "brightness": 0.812,
+   "color": "yellow",
+   "risk": 0.415,
+   "face": "front"
+  },
+  {
+   "id": 14,
+   "floor": 2,
+   "col": 5,
+   "x": 514,
+   "y": 863,
+   "w": 116,
+   "h": 98,
+   "state": "on",
+   "brightness": 0.799,
+   "color": "yellow",
+   "risk": 0.409,
+   "face": "front"
+  },
+  {
+   "id": 15,
+   "floor": 2,
+   "col": 6,
+   "x": 638,
+   "y": 862,
+   "w": 73,
+   "h": 100,
+   "state": "on",
+   "brightness": 0.823,
+   "color": "yellow",
+   "risk": 0.421,
+   "face": "front"
+  },
+  {
+   "id": 16,
+   "floor": 2,
+   "col": 7,
+   "x": 719,
+   "y": 861,
+   "w": 64,
+   "h": 101,
+   "state": "on",
+   "brightness": 0.826,
+   "color": "yellow",
+   "risk": 0.422,
+   "face": "front"
+  },
+  {
+   "id": 17,
+   "floor": 2,
+   "col": 10,
+   "x": 874,
+   "y": 883,
+   "w": 23,
+   "h": 86,
+   "state": "on",
+   "brightness": 0.787,
+   "color": "orange",
+   "risk": 0.376,
+   "face": "front"
+  },
+  {
+   "id": 18,
+   "floor": 2,
+   "col": 10,
+   "x": 904,
+   "y": 898,
+   "w": 19,
+   "h": 74,
+   "state": "on",
+   "brightness": 0.795,
+   "color": "orange",
+   "risk": 0.38,
+   "face": "front"
+  },
+  {
+   "id": 19,
+   "floor": 3,
+   "col": 2,
+   "x": 387,
+   "y": 707,
+   "w": 40,
+   "h": 107,
+   "state": "on",
+   "brightness": 0.732,
+   "color": "orange",
+   "risk": 0.381,
+   "face": "front"
+  },
+  {
+   "id": 20,
+   "floor": 3,
+   "col": 3,
+   "x": 435,
+   "y": 703,
+   "w": 71,
+   "h": 110,
+   "state": "on",
+   "brightness": 0.811,
+   "color": "yellow",
+   "risk": 0.453,
+   "face": "front"
+  },
+  {
+   "id": 21,
+   "floor": 3,
+   "col": 5,
+   "x": 514,
+   "y": 698,
+   "w": 116,
+   "h": 113,
+   "state": "on",
+   "brightness": 0.794,
+   "color": "yellow",
+   "risk": 0.443,
+   "face": "front"
+  },
+  {
+   "id": 22,
+   "floor": 3,
+   "col": 6,
+   "x": 638,
+   "y": 695,
+   "w": 73,
+   "h": 112,
+   "state": "on",
+   "brightness": 0.828,
+   "color": "yellow",
+   "risk": 0.462,
+   "face": "front"
+  },
+  {
+   "id": 23,
+   "floor": 3,
+   "col": 7,
+   "x": 719,
+   "y": 694,
+   "w": 64,
+   "h": 112,
+   "state": "on",
+   "brightness": 0.826,
+   "color": "yellow",
+   "risk": 0.461,
+   "face": "front"
+  },
+  {
+   "id": 25,
+   "floor": 3,
+   "col": 10,
+   "x": 874,
+   "y": 727,
+   "w": 23,
+   "h": 93,
+   "state": "on",
+   "brightness": 0.785,
+   "color": "orange",
+   "risk": 0.409,
+   "face": "front"
+  },
+  {
+   "id": 26,
+   "floor": 3,
+   "col": 10,
+   "x": 904,
+   "y": 746,
+   "w": 19,
+   "h": 81,
+   "state": "on",
+   "brightness": 0.795,
+   "color": "orange",
+   "risk": 0.414,
+   "face": "front"
+  },
+  {
+   "id": 27,
+   "floor": 4,
+   "col": 2,
+   "x": 388,
+   "y": 548,
+   "w": 39,
+   "h": 104,
+   "state": "on",
+   "brightness": 0.728,
+   "color": "orange",
+   "risk": 0.411,
+   "face": "front"
+  },
+  {
+   "id": 28,
+   "floor": 4,
+   "col": 3,
+   "x": 435,
+   "y": 543,
+   "w": 71,
+   "h": 107,
+   "state": "on",
+   "brightness": 0.812,
+   "color": "yellow",
+   "risk": 0.491,
+   "face": "front"
+  },
+  {
+   "id": 29,
+   "floor": 4,
+   "col": 5,
+   "x": 514,
+   "y": 535,
+   "w": 116,
+   "h": 112,
+   "state": "on",
+   "brightness": 0.789,
+   "color": "yellow",
+   "risk": 0.477,
+   "face": "front"
+  },
+  {
+   "id": 30,
+   "floor": 4,
+   "col": 6,
+   "x": 638,
+   "y": 531,
+   "w": 73,
+   "h": 109,
+   "state": "on",
+   "brightness": 0.827,
+   "color": "yellow",
+   "risk": 0.5,
+   "face": "front"
+  },
+  {
+   "id": 31,
+   "floor": 4,
+   "col": 7,
+   "x": 719,
+   "y": 529,
+   "w": 64,
+   "h": 110,
+   "state": "on",
+   "brightness": 0.819,
+   "color": "yellow",
+   "risk": 0.495,
+   "face": "front"
+  },
+  {
+   "id": 33,
+   "floor": 4,
+   "col": 10,
+   "x": 874,
+   "y": 567,
+   "w": 23,
+   "h": 92,
+   "state": "on",
+   "brightness": 0.783,
+   "color": "orange",
+   "risk": 0.442,
+   "face": "front"
+  },
+  {
+   "id": 34,
+   "floor": 4,
+   "col": 10,
+   "x": 903,
+   "y": 592,
+   "w": 20,
+   "h": 78,
+   "state": "on",
+   "brightness": 0.791,
+   "color": "orange",
+   "risk": 0.446,
+   "face": "front"
+  },
+  {
+   "id": 35,
+   "floor": 5,
+   "col": 2,
+   "x": 387,
+   "y": 390,
+   "w": 40,
+   "h": 101,
+   "state": "on",
+   "brightness": 0.731,
+   "color": "orange",
+   "risk": 0.444,
+   "face": "front"
+  },
+  {
+   "id": 36,
+   "floor": 5,
+   "col": 3,
+   "x": 435,
+   "y": 381,
+   "w": 71,
+   "h": 108,
+   "state": "on",
+   "brightness": 0.803,
+   "color": "yellow",
+   "risk": 0.523,
+   "face": "front"
+  },
+  {
+   "id": 37,
+   "floor": 5,
+   "col": 5,
+   "x": 514,
+   "y": 370,
+   "w": 116,
+   "h": 114,
+   "state": "on",
+   "brightness": 0.782,
+   "color": "orange",
+   "risk": 0.475,
+   "face": "front"
+  },
+  {
+   "id": 38,
+   "floor": 5,
+   "col": 6,
+   "x": 638,
+   "y": 364,
+   "w": 73,
+   "h": 111,
+   "state": "on",
+   "brightness": 0.816,
+   "color": "yellow",
+   "risk": 0.531,
+   "face": "front"
+  },
+  {
+   "id": 39,
+   "floor": 5,
+   "col": 7,
+   "x": 718,
+   "y": 361,
+   "w": 65,
+   "h": 111,
+   "state": "on",
+   "brightness": 0.813,
+   "color": "yellow",
+   "risk": 0.529,
+   "face": "front"
+  },
+  {
+   "id": 41,
+   "floor": 5,
+   "col": 10,
+   "x": 874,
+   "y": 406,
+   "w": 23,
+   "h": 93,
+   "state": "on",
+   "brightness": 0.779,
+   "color": "orange",
+   "risk": 0.473,
+   "face": "front"
+  },
+  {
+   "id": 42,
+   "floor": 5,
+   "col": 10,
+   "x": 903,
+   "y": 435,
+   "w": 20,
+   "h": 79,
+   "state": "on",
+   "brightness": 0.787,
+   "color": "orange",
+   "risk": 0.478,
+   "face": "front"
+  },
+  {
+   "id": 44,
+   "floor": 6,
+   "col": 2,
+   "x": 387,
+   "y": 224,
+   "w": 40,
+   "h": 78,
+   "state": "on",
+   "brightness": 0.754,
+   "color": "orange",
+   "risk": 0.491,
+   "face": "front"
+  },
+  {
+   "id": 46,
+   "floor": 6,
+   "col": 3,
+   "x": 435,
+   "y": 218,
+   "w": 71,
+   "h": 107,
+   "state": "on",
+   "brightness": 0.804,
+   "color": "yellow",
+   "risk": 0.561,
+   "face": "front"
+  },
+  {
+   "id": 47,
+   "floor": 6,
+   "col": 5,
+   "x": 514,
+   "y": 201,
+   "w": 116,
+   "h": 117,
+   "state": "on",
+   "brightness": 0.776,
+   "color": "orange",
+   "risk": 0.505,
+   "face": "front"
+  },
+  {
+   "id": 48,
+   "floor": 6,
+   "col": 6,
+   "x": 638,
+   "y": 191,
+   "w": 73,
+   "h": 116,
+   "state": "on",
+   "brightness": 0.806,
+   "color": "yellow",
+   "risk": 0.562,
+   "face": "front"
+  },
+  {
+   "id": 49,
+   "floor": 6,
+   "col": 7,
+   "x": 718,
+   "y": 187,
+   "w": 65,
+   "h": 114,
+   "state": "on",
+   "brightness": 0.81,
+   "color": "yellow",
+   "risk": 0.565,
+   "face": "front"
+  },
+  {
+   "id": 51,
+   "floor": 6,
+   "col": 10,
+   "x": 874,
+   "y": 240,
+   "w": 23,
+   "h": 90,
+   "state": "on",
+   "brightness": 0.776,
+   "color": "orange",
+   "risk": 0.505,
+   "face": "front"
+  },
+  {
+   "id": 52,
+   "floor": 6,
+   "col": 10,
+   "x": 903,
+   "y": 276,
+   "w": 20,
+   "h": 72,
+   "state": "on",
+   "brightness": 0.783,
+   "color": "orange",
+   "risk": 0.51,
+   "face": "front"
+  }
+ ],
+ "actions": [
+  {
+   "id": 44,
+   "state": "off"
+  },
+  {
+   "id": 46,
+   "state": "off"
+  },
+  {
+   "id": 47,
+   "state": "off"
+  },
+  {
+   "id": 48,
+   "state": "off"
+  },
+  {
+   "id": 49,
+   "state": "off"
+  },
+  {
+   "id": 51,
+   "state": "off"
+  },
+  {
+   "id": 52,
+   "state": "off"
+  },
+  {
+   "id": 35,
+   "state": "off"
+  },
+  {
+   "id": 36,
+   "state": "off"
+  },
+  {
+   "id": 37,
+   "state": "off"
+  },
+  {
+   "id": 38,
+   "state": "off"
+  },
+  {
+   "id": 39,
+   "state": "off"
+  },
+  {
+   "id": 41,
+   "state": "off"
+  },
+  {
+   "id": 42,
+   "state": "off"
+  },
+  {
+   "id": 27,
+   "state": "off"
+  },
+  {
+   "id": 28,
+   "state": "off"
+  },
+  {
+   "id": 29,
+   "state": "off"
+  },
+  {
+   "id": 30,
+   "state": "off"
+  },
+  {
+   "id": 31,
+   "state": "off"
+  },
+  {
+   "id": 33,
+   "state": "off"
+  },
+  {
+   "id": 34,
+   "state": "off"
+  },
+  {
+   "id": 19,
+   "state": "off"
+  },
+  {
+   "id": 20,
+   "state": "off"
+  },
+  {
+   "id": 21,
+   "state": "off"
+  },
+  {
+   "id": 22,
+   "state": "off"
+  },
+  {
+   "id": 23,
+   "state": "off"
+  },
+  {
+   "id": 25,
+   "state": "off"
+  },
+  {
+   "id": 26,
+   "state": "off"
+  },
+  {
+   "id": 12,
+   "state": "off"
+  },
+  {
+   "id": 13,
+   "state": "off"
+  },
+  {
+   "id": 14,
+   "state": "off"
+  },
+  {
+   "id": 15,
+   "state": "off"
+  },
+  {
+   "id": 16,
+   "state": "off"
+  },
+  {
+   "id": 17,
+   "state": "off"
+  },
+  {
+   "id": 18,
+   "state": "off"
+  }
+ ],
+ "risk_before": 0.439,
+ "risk_after": 0.079,
+ "reason": "Foggy, cloudy night with high migration; all 35 non\u2011essential windows on floors 2\u20116 are turned off, targeting the highest\u2011risk, brightest windows.",
+ "source": "bullsai",
+ "rule": {
+  "level": "high",
+  "goal": "all",
+  "source": {
+   "name": "Lights Out guidance (Audubon, BirdCast, NY DEC)",
+   "url": "https://birdcast.org/lights-out/"
+  },
+  "text": "Heavy migration: turn off every non-essential lit window (lobby and safety lights stay on)."
+ },
+ "estimate": {
+  "reduction": 0.833,
+  "at_least": true,
+  "lit_area_off": 0.851,
+  "season": "fall",
+  "halving_factor": 6,
+  "source": {
+   "name": "Van Doren et al. 2021, PNAS",
+   "url": "https://www.pnas.org/doi/10.1073/pnas.2101666118"
+  }
+ },
+ "energy_saved_kwh": 16.8,
+ "money_saved_usd": 2.86,
+ "conditions": {
+  "summary": "Fog and low clouds, steady NW wind. Heavy migration night.",
+  "migration_level": "high",
+  "sky_danger": 0.9,
+  "sky_cover": 95,
+  "fog": true,
+  "wind_dir": "NW",
+  "wind_speed_mph": 14.0
+ }
+}

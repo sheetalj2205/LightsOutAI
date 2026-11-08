@@ -40,7 +40,7 @@ class LedView:
         return COLOR_HEX.get(self.win_color.get(lit[0], ""), DEFAULT_HEX) if lit else DEFAULT_HEX
 
     def load_building(self, msg: dict) -> dict:
-        windows = msg.get("windows", [])
+        windows = [w for w in msg.get("windows", []) if w.get("face", "front") == "front"]  # LEDs = front side
         bf = max([w["floor"] for w in windows] + [1])
         bc = max([w["col"] for w in windows] + [1])
         self.led_of.clear(), self.win_state.clear(), self.win_color.clear()

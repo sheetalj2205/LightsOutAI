@@ -6,8 +6,14 @@ TEST_PLACE = {"lat": 41.88, "lon": -87.63, "place": "Testville, IL", "matched": 
 
 
 @pytest.fixture(autouse=True)
-def no_external_services(monkeypatch):
-    """Tests never call real Gemini, BullsAI, Tiger Data or the weather service, even if .env has keys."""
+def no_external_services(monkeypatch, tmp_path):
+    """Tests never call real Gemini, BullsAI, Tiger Data or the weather service, even if .env has keys,
+    and write photos to a temp folder (server start-up clears the output folder)."""
+    monkeypatch.setattr(config, "OUTPUT_DIR", tmp_path)
+    from app.main import app
+    out = next(r.app for r in app.routes if getattr(r, "name", "") == "output")  # /output static files
+    monkeypatch.setattr(out, "directory", tmp_path)
+    monkeypatch.setattr(out, "all_directories", [tmp_path])
     for name in ("GEMINI_API_KEY", "BULLSAI_API_KEY", "BULLSAI_BASE_URL", "BULLSAI_MODEL", "DATABASE_URL"):
         monkeypatch.setattr(config, name, "")
     monkeypatch.setattr(weather, "get_conditions", lambda *a, **k: {

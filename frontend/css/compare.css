@@ -1,0 +1,40 @@
+/* Before / after photos (js/compare.js). */
+.cmp { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.cmp-pane { margin: 0; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.cmp-tag { align-self: flex-start; font-size: 12px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase;
+  padding: 5px 12px; border-radius: 999px; background: rgba(255, 122, 122, .14); color: #ff8a8a; }
+.cmp-pane.after .cmp-tag { background: rgba(52, 211, 153, .14); color: #34d399; }
+/* The frame hugs the photo exactly, so the window boxes drawn over it line up. */
+.cmp-frame { position: relative; align-self: center; width: fit-content; max-width: 100%; border-radius: 14px; overflow: hidden; background: #0d1020; line-height: 0; }
+.cmp-frame img { display: block; max-width: 100%; max-height: 72vh; width: auto; height: auto; }
+.cmp-svg { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+
+/* windows the AI changed */
+.cmp-svg .mark { stroke-width: 3px; vector-effect: non-scaling-stroke; }
+.cmp-svg .mark.off { fill: rgba(6, 9, 22, .9); stroke: #34d399; }
+.cmp-svg .mark.dim { fill: rgba(10, 12, 32, .5); stroke: #fbbf24; stroke-dasharray: 6 4; }
+.cmp-svg .mark.anim { animation: cmp-in .45s ease backwards; }  /* hidden until its turn, visible without animation */
+@keyframes cmp-in { from { opacity: 0; } to { opacity: 1; } }
+/* simulated lights on a day photo */
+.cmp-svg .glow.on { fill: rgba(255, 200, 100, .6); }
+.cmp-svg .glow.dim { fill: rgba(255, 200, 100, .28); }
+.cmp-svg .outline { fill: none; stroke: #fff; stroke-width: 1.5px; stroke-dasharray: 4 3; vector-effect: non-scaling-stroke; opacity: .85; }
+
+.cmp-pane.pending .cmp-frame img { filter: grayscale(.6) brightness(.45); }
+.cmp-wait { position: absolute; inset: 0; display: grid; place-content: center; gap: 6px; text-align: center; padding: 16px; color: #fff; line-height: 1.4; }
+.cmp-wait b { font-size: 17px; }
+.cmp-wait span { font-size: 13px; opacity: .8; }
+
+.cmp-summary { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 18px; margin: 14px 0 0; font-size: 15px; }
+.cmp-summary.muted { opacity: .7; font-size: 14px; }
+.cmp-stat { display: inline-flex; align-items: center; gap: 7px; }
+.cmp-stat b { font-size: 20px; font-variant-numeric: tabular-nums; }
+.cmp-stat i { width: 14px; height: 14px; border-radius: 4px; display: inline-block; }
+.cmp-stat.off i { background: #0a0d1c; border: 2.5px solid #34d399; }
+.cmp-stat.dim i { background: rgba(10, 12, 32, .45); border: 2.5px dashed #fbbf24; }
+.cmp-stat.keep { font-size: 13px; font-weight: 600; opacity: .75; }
+.cmp-stat.keep::before { content: ""; width: 9px; height: 9px; border-radius: 50%; background: #ffcf6e; box-shadow: 0 0 8px #ffcf6e; }
+
+@media (max-width: 700px) {
+  .cmp { grid-template-columns: 1fr; }
+}

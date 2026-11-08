@@ -202,9 +202,13 @@ export function createScene(container) {
   const slots = new Map();    // window id -> { idx: [front, back], data, state, y }
   let cur = [], tgt = [];
   let riskView = false;
+  let photoMode = false;      // real photo on the building: panes darken the photo instead of drawing light
+  const PHOTO_LEVEL = { on: new THREE.Color(1, 1, 1), dim: new THREE.Color(0.42, 0.42, 0.46), off: new THREE.Color(0.06, 0.07, 0.11) };
+  const WARM = new THREE.Color(1, 0.78, 0.45);
   let scanning = false;
 
   function targetFor(slot) {
+    if (photoMode) return (PHOTO_LEVEL[slot.state] || PHOTO_LEVEL.on).clone();
     let level = LEVEL[slot.state] ?? 1;
     if (level === 0) return OFF_GLASS.clone();
     if (riskView) level = Math.max(level, 0.7);
@@ -333,7 +337,178 @@ export function createScene(container) {
   }
 
 
-  function setBuilding({ floors, cols, windows }, opts = {}) {
+  // Average color of the photo's facade area, darkened for night: used for the plain walls.
+  function facadeColor(img, x0, y0, cw, ch) {
+    try {
+      const c = document.createElement("canvas");
+      c.width = c.height = 16;
+      const ctx = c.getContext("2d");
+      ctx.drawImage(img, x0, y0, cw, ch, 0, 0, 16, 16);
+      const px = ctx.getImageData(0, 0, 16, 16).data;
+      let r = 0, g = 0, b = 0;
+      for (let i = 0; i < px.length; i += 4) { r += px[i]; g += px[i + 1]; b += px[i + 2]; }
+      const n = px.length / 4;
+      return new THREE.Color(r / n / 255, g / n / 255, b / n / 255).multiplyScalar(0.55);
+    } catch (e) {
+      return null;  // photo from another origin without CORS: keep the default wall color
+    }
+  }
+
+  // Crop of one side's photo: its windows' bounding box plus a small margin (roof above, entrance below).
+  function cropOf(ws, IW, IH) {
+    let x0 = Math.min(...ws.map((w) => w.x)), y0 = Math.min(...ws.map((w) => w.y));
+    let x1 = Math.max(...ws.map((w) => w.x + w.w)), y1 = Math.max(...ws.map((w) => w.y + w.h));
+    const mx = (x1 - x0) * 0.05, my = (y1 - y0) * 0.06;
+    x0 = Math.max(0, x0 - mx); x1 = Math.min(IW, x1 + mx);
+    y0 = Math.max(0, y0 - my); y1 = Math.min(IH, y1 + my);
+    return { x0, y0, cw: x1 - x0, ch: y1 - y0, IW, IH };
+  }
+
+  // The real building in the 3D scene: each uploaded photo, cropped to the facade, becomes its side
+  // of the building (front, right, back, left), and every window's light sits where that window is
+  // in its photo. Without a back photo the back repeats the front.
+  function photoBuilding(b, opts) {
+    disposeBuilding();
+    photoMode = true;
+    building = new THREE.Group();
+    const faces = {};
+    for (const face of ["front", "right", "back", "left"]) {
+      const info = (b.photos || {})[face];
+      const ws = b.windows.filter((w) => (w.face || "front") === face);
+      if (!info || !info.photo || !ws.length) continue;
+      faces[face] = { ...info, windows: ws, crop: cropOf(ws, info.image_width, info.image_height) };
+    }
+    const front = faces.front;
+
+    // Width and height from the front photo, depth from a side photo (if any).
+    let W = 9, H = (W * front.crop.ch) / front.crop.cw;
+    if (H > 15) { W *= 15 / H; H = 15; }
+    if (W > 22) { H *= 22 / W; W = 22; }
+    H = Math.max(H, 3);
+    const sidePhoto = faces.right || faces.left;
+    const d = Math.min(Math.max(sidePhoto ? (H * sidePhoto.crop.cw) / sidePhoto.crop.ch : W * 0.42, 3), 22);
+    const floors = Math.max(1, ...b.windows.map((w) => w.floor));
+    const cols = Math.max(1, ...front.windows.map((w) => w.col));
+    dims = { w: W, h: H, d, floors, cols };
+    const top = BASE_Y + H;
+
+    const dark = new THREE.MeshStandardMaterial({ color: 0x3a4058, roughness: 0.6, metalness: 0.3 });
+    const wall = new THREE.MeshStandardMaterial({ color: 0x5d6284, roughness: 0.85 });
+    building.add(box(W + 1, BASE_Y, d + 1, dark, 0, BASE_Y / 2, 0));
+    building.add(box(W, H, d, wall, 0, BASE_Y + H / 2, 0));
+    building.add(box(W + 0.2, 0.16, d + 0.2, dark, 0, top + 0.08, 0));
+
+    // Where each side sits: rotation about the vertical axis and its width.
+    const place = {
+      front: { rot: 0, width: W, at: new THREE.Vector3(0, 0, d / 2) },
+      back: { rot: Math.PI, width: W, at: new THREE.Vector3(0, 0, -d / 2) },
+      right: { rot: Math.PI / 2, width: d, at: new THREE.Vector3(W / 2, 0, 0) },
+      left: { rot: -Math.PI / 2, width: d, at: new THREE.Vector3(-W / 2, 0, 0) },
+    };
+    const shown = { ...faces };
+    if (!shown.back) shown.back = front;  // back repeats the front photo and its windows
+
+    // Photos on the sides. Day photos are darkened so the scene reads as night.
+    for (const [face, f] of Object.entries(shown)) {
+      const P = place[face], c = f.crop;
+      const tex = new THREE.TextureLoader().load(f.photo, (t) => {
+        if (f !== front) return;
+        const col = facadeColor(t.image, c.x0, c.y0, c.cw, c.ch);
+        if (col) wall.color.copy(col);
+      });
+      tex.colorSpace = THREE.SRGBColorSpace;
+      tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
+      tex.offset.set(c.x0 / c.IW, 1 - (c.y0 + c.ch) / c.IH);
+      tex.repeat.set(c.cw / c.IW, c.ch / c.IH);
+      const mat = new THREE.MeshBasicMaterial({ map: tex, color: f.lights === "simulated" ? 0x7e7f9c : 0xe8e8f0, toneMapped: false });
+      const plane = new THREE.Mesh(new THREE.PlaneGeometry(P.width, H), mat);
+      const normal = new THREE.Vector3(0, 0, 1).applyAxisAngle(UP, P.rot);
+      plane.position.copy(P.at).addScaledVector(normal, 0.01);
+      plane.position.y = BASE_Y + H / 2;
+      plane.rotation.y = P.rot;
+      building.add(plane);
+    }
+
+    // Window lights: one pane per window on its side (front windows also on the back when it repeats the front).
+    // Lit panes are see-through so the real photo shows; off panes go dark.
+    const placements = [];
+    for (const [face, f] of Object.entries(shown)) for (const win of f.windows) placements.push([win, face, f]);
+    const n = placements.length;
+    // Multiply: white leaves the photo as it is (lit glass stays lit), dark turns a window off.
+    winMesh = new THREE.InstancedMesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({
+      toneMapped: false, transparent: true, premultipliedAlpha: true, blending: THREE.MultiplyBlending, depthWrite: false,
+    }), n);
+    haloMesh = new THREE.InstancedMesh(new THREE.PlaneGeometry(1.1, 1.1), new THREE.MeshBasicMaterial({
+      transparent: true, opacity: 0.55, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false,
+    }), n);
+    // A night photo already shows its lights; a day photo gets tonight's lights drawn on.
+    haloMesh.visible = Object.values(faces).some((f) => f.lights === "simulated");
+    slots.clear();
+    cur = []; tgt = [];
+    const m = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new THREE.Vector3(), p = new THREE.Vector3();
+    placements.forEach(([win, face, f], i) => {
+      const P = place[face], c = f.crop;
+      const u = ((win.x + win.w / 2 - c.x0) / c.cw) * P.width - P.width / 2;  // across the side
+      const y = BASE_Y + H - ((win.y + win.h / 2 - c.y0) / c.ch) * H;
+      const across = new THREE.Vector3(1, 0, 0).applyAxisAngle(UP, P.rot);
+      const normal = new THREE.Vector3(0, 0, 1).applyAxisAngle(UP, P.rot);
+      q.setFromAxisAngle(UP, P.rot);
+      s.set((win.w / c.cw) * P.width * 0.96, (win.h / c.ch) * H * 0.96, 1);
+      p.copy(P.at).addScaledVector(across, u).addScaledVector(normal, 0.02);
+      p.y = y;
+      winMesh.setMatrixAt(i, m.compose(p, q, s));
+      p.addScaledVector(normal, 0.005);
+      haloMesh.setMatrixAt(i, m.compose(p, q, s));
+      cur.push(OFF_GLASS.clone()); tgt.push(OFF_GLASS.clone());
+      winMesh.setColorAt(i, OFF_GLASS);
+      haloMesh.setColorAt(i, new THREE.Color(0, 0, 0));
+      const slot = slots.get(win.id) || { idx: [], data: win, state: win.state || "on", y };
+      slot.idx.push(i);
+      slots.set(win.id, slot);
+    });
+    building.add(winMesh, haloMesh);
+    finishBuilding(W, d, opts);
+  }
+
+  // AI scan line, plaza and trees, then show it (rising out of the ground if asked).
+  function finishBuilding(w, d, opts) {
+    scanMeshes = [];
+    const scanMat = new THREE.MeshBasicMaterial({ color: 0x7df9ff, transparent: true, opacity: 0.85, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false });
+    for (const side of [1, -1]) {
+      const sm = new THREE.Mesh(new THREE.PlaneGeometry(w + 0.6, 0.16), scanMat);
+      sm.position.set(0, BASE_Y, side * (d / 2 + 0.2));
+      sm.rotation.y = side === 1 ? 0 : Math.PI;
+      sm.visible = false;
+      building.add(sm);
+      scanMeshes.push(sm);
+    }
+    addGrounds(building, w, d);
+    scene.add(building);
+    refreshTargets();
+    fitCamera();
+    if (opts.rise) {
+      building.scale.y = 0.001;
+      rise = { start: performance.now(), ms: 1800 };
+    } else {
+      rise = null;
+    }
+  }
+
+  // The building in the scene: the real photos on a 3D block when we have them,
+  // otherwise (offline demo data) a generic tower with the same floors and windows.
+  function setBuilding(b, opts = {}) {
+    const windows = b.windows || [];
+    const front = (b.photos || {}).front;
+    if (front && front.photo && windows.some((w) => (w.face || "front") === "front" && w.w > 0 && w.h > 0)) {
+      photoBuilding(b, opts);
+      return;
+    }
+    genericBuilding(b, opts);
+  }
+
+  function genericBuilding({ floors, cols, windows }, opts = {}) {
+    photoMode = false;
+    windows = (windows || []).filter((w) => (w.face || "front") === "front");
     floors = Math.max(1, floors || Math.max(1, ...windows.map((w) => w.floor)));
     cols = Math.max(1, cols || Math.max(1, ...windows.map((w) => w.col)));
     disposeBuilding();
@@ -436,30 +611,7 @@ export function createScene(container) {
       }
     }
     building.add(winMesh, haloMesh);
-
-    // AI scan line that sweeps the facade while the AI is thinking.
-    scanMeshes = [];
-    const scanMat = new THREE.MeshBasicMaterial({ color: 0x7df9ff, transparent: true, opacity: 0.85, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false });
-    for (const side of [1, -1]) {
-      const sm = new THREE.Mesh(new THREE.PlaneGeometry(w + 0.6, 0.16), scanMat);
-      sm.position.set(0, BASE_Y, side * (d / 2 + 0.2));
-      sm.rotation.y = side === 1 ? 0 : Math.PI;
-      sm.visible = false;
-      building.add(sm);
-      scanMeshes.push(sm);
-    }
-
-    addGrounds(building, w, d);
-
-    scene.add(building);
-    refreshTargets();
-    fitCamera();
-    if (opts.rise) {
-      building.scale.y = 0.001;
-      rise = { start: performance.now(), ms: 1800 };
-    } else {
-      rise = null;
-    }
+    finishBuilding(w, d, opts);
   }
 
   function setWindow(id, state) {
@@ -607,6 +759,7 @@ export function createScene(container) {
         winMesh.setColorAt(i, c);
         glow.copy(c).sub(OFF_GLASS);
         glow.r = Math.max(glow.r, 0); glow.g = Math.max(glow.g, 0); glow.b = Math.max(glow.b, 0);
+        if (photoMode) glow.multiply(WARM);
         haloMesh.setColorAt(i, glow);
         changed = true;
       }

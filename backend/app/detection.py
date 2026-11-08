@@ -223,3 +223,125 @@ def save_after_image(img: np.ndarray, windows: list[Window], path: Path) -> Path
     path.parent.mkdir(parents=True, exist_ok=True)
     cv2.imwrite(str(path), out)
     return path
+
+
+AUTO_THRESHOLDS = (230, 220, 210, 200, 190, 180, 170, 160)
+
+
+def detect_auto(img: np.ndarray) -> list[Window]:
+    """Try several brightness levels and keep the one that looks most like rows of windows
+    (most windows per floor). Used when the AI can't read the photo. [] if nothing fits."""
+    best, best_score = [], 0.0
+    for t in AUTO_THRESHOLDS:
+        wins = detect_windows(img, t)
+        floors = len({w.floor for w in wins})
+        if len(wins) < 6 or floors < 2:
+            continue
+        score = len(wins) / floors
+        if score >= 2 and score > best_score:
+            best, best_score = wins, score
+    return best
+
+
+def _peaks(profile: np.ndarray, thresh: float, min_gap: int) -> list[int]:
+    """Local maxima above thresh, at least min_gap apart (strongest kept first)."""
+    idx = [i for i in range(1, len(profile) - 1)
+           if profile[i] >= thresh and profile[i] >= profile[i - 1] and profile[i] >= profile[i + 1]]
+    idx.sort(key=lambda i: -profile[i])
+    out: list[int] = []
+    for i in idx:
+        if all(abs(i - j) >= min_gap for j in out):
+            out.append(i)
+    return sorted(out)
+
+
+def detect_facade_grid(img: np.ndarray, lit: int = 150, lit_cell: int = 110) -> list[Window]:
+    """Glass facades: find the big lit areas, then split each one along its dark window frames
+    (vertical frames first, then horizontal frames inside each column, which copes with the camera
+    angle). Every cell is one window, lit or dark. Small bright spots (street lamps, wet pavement)
+    have no frame grid and are dropped. [] when the photo has no such facade."""
+    h0, w0 = img.shape[:2]
+    scale = min(1.0, MAX_SIDE / max(h0, w0))
+    small = cv2.resize(img, None, fx=scale, fy=scale, interpolation=cv2.INTER_AREA) if scale < 1 else img
+    H, W = small.shape[:2]
+    gray = cv2.GaussianBlur(cv2.cvtColor(small, cv2.COLOR_BGR2GRAY), (3, 3), 0)
+    k = max(9, W // 50)
+    closed = cv2.morphologyEx((gray > lit).astype(np.uint8), cv2.MORPH_CLOSE, np.ones((k, k), np.uint8))
+    n, lab, st, _ = cv2.connectedComponentsWithStats(closed)
+    comps = [i for i in range(1, n) if st[i, cv2.CC_STAT_AREA] >= 0.01 * W * H]
+    if not comps:
+        return []
+    biggest = max(st[i, cv2.CC_STAT_AREA] for i in comps)
+    comps = [i for i in comps if st[i, cv2.CC_STAT_AREA] >= 0.15 * biggest]
+    local = cv2.blur(gray.astype(np.float32), (k * 2 + 1, k * 2 + 1))
+    dark = (gray < local * 0.75).astype(np.float32)  # frames are darker than the glass around them
+
+    boxes, stats, where = [], [], []  # where: (area index, column in area, row from bottom in column)
+    areas = []  # (left, top, right, bottom, rows, columns) of each lit area that was kept
+    for c in comps:
+        start = len(boxes)
+        x, y, w, h = (int(v) for v in st[c, :4])
+        strip = 0
+        m = (lab[y:y + h, x:x + w] == c).astype(np.float32)
+        d = dark[y:y + h, x:x + w] * m
+        colp = np.convolve(d.sum(0) / np.maximum(m.sum(0), 1), np.ones(3) / 3, "same")
+        xb = sorted(set([0] + _peaks(colp, 0.3, max(6, w // 40)) + [w - 1]))
+        for a, b in zip(xb, xb[1:]):
+            if b - a < max(5, w // 80):
+                continue
+            sm, sd = m[:, a:b], d[:, a:b]
+            rows = np.where(sm.sum(1) > 0.5 * (b - a))[0]
+            if len(rows) < 8:
+                continue
+            r0, r1 = int(rows[0]), int(rows[-1])
+            rowp = np.convolve(sd[r0:r1 + 1].sum(1) / np.maximum(sm[r0:r1 + 1].sum(1), 1), np.ones(3) / 3, "same")
+            yb = sorted(set([r0] + [r0 + i for i in _peaks(rowp, 0.45, max(6, (b - a) // 2))] + [r1]))
+            spans = [(p, q) for p, q in zip(yb, yb[1:]) if q - p >= max(5, (b - a) // 4)]
+            if spans:
+                strip += 1
+            for row, (p, q) in enumerate(reversed(spans), start=1):
+                mx, my = max(1, (b - a) // 8), max(1, (q - p) // 8)
+                cx0, cy0, cx1, cy1 = x + a + mx, y + p + my, x + b - mx, y + q - my
+                if cx1 <= cx0 or cy1 <= cy0:
+                    continue
+                level = float(gray[cy0:cy1, cx0:cx1].mean())
+                boxes.append((cx0, cy0, cx1 - cx0, cy1 - cy0))
+                stats.append((level, _main_color(small[cy0:cy1, cx0:cx1])))
+                where.append((len(areas), strip, row))
+        if len(boxes) - start < 4:  # a lit patch without a frame grid
+            del boxes[start:], stats[start:], where[start:]
+            continue
+        mine = where[start:]
+        # Rows of a typical column (a few columns get split by transoms or lamps).
+        per_col = {}
+        for _, sc, r in mine:
+            per_col[sc] = max(per_col.get(sc, 0), r)
+        rows = int(np.median(list(per_col.values())))
+        where[start:] = [(ai, sc, min(r, rows)) for ai, sc, r in mine]
+        areas.append((x, y, x + w, y + h, rows, max(per_col)))
+
+    # Floors and columns straight from the frame grid. An area above another continues its floor
+    # numbers; an area beside another continues its column numbers.
+    def floor_offset(i):  # floors of the tallest stack of areas below this one
+        b = areas[i][3]
+        return max([floor_offset(j) + areas[j][4] for j in range(len(areas)) if areas[j][1] >= b - 0.02 * H], default=0)
+
+    def col_offset(i):  # columns of the widest row of areas to the left, at the same height
+        l, t, _, b = areas[i][:4]
+        return max([col_offset(j) + areas[j][5] for j in range(len(areas))
+                    if areas[j][2] <= l + 0.02 * W and areas[j][1] < b and areas[j][3] > t], default=0)
+
+    floors_cols = [(floor_offset(a) + row, col_offset(a) + col) for a, col, row in where]
+    inv = 1 / scale
+    order = sorted(range(len(boxes)), key=lambda i: (floors_cols[i][0], floors_cols[i][1], boxes[i][0]))
+    windows = []
+    for new_id, i in enumerate(order, start=1):
+        x, y, w, h = boxes[i]
+        level, color = stats[i]
+        windows.append(Window(
+            id=new_id, floor=floors_cols[i][0], col=floors_cols[i][1],
+            x=round(x * inv), y=round(y * inv), w=round(w * inv), h=round(h * inv),
+            state="on" if level >= lit_cell else "off", brightness=round(min(level / 255, 1.0), 3),
+            color=color if level >= lit_cell else "white",
+        ))
+    return windows

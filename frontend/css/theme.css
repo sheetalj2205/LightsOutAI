@@ -1,0 +1,39 @@
+/* Lights Out AI: shared theme for every page (night sky, warm window light). */
+:root {
+  --bg: #080c20;
+  --card: #10163a;
+  --card-2: #161d48;
+  --line: rgba(255, 255, 255, .09);
+  --text: #eef0ff;
+  --muted: #9aa1c4;
+  --accent: #ffc45e;              /* warm window light: buttons, highlights */
+  --accent-ink: #1d1405;          /* text on accent */
+  --accent-soft: rgba(255, 196, 94, .12);
+  --good: #34d399;
+  --good-soft: rgba(52, 211, 153, .14);
+  --mid: #fbbf24;
+  --mid-soft: rgba(251, 191, 36, .14);
+  --bad: #ff7a7a;
+  --bad-soft: rgba(255, 122, 122, .14);
+  --lit: #ffcf6e;
+  --radius: 18px;
+  --shadow: 0 1px 2px rgba(0, 0, 0, .3), 0 12px 32px rgba(0, 0, 0, .28);
+  --serif: "Fraunces", Georgia, "Times New Roman", serif;
+  --sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  color: var(--text);
+  font: 15px/1.55 var(--sans);
+  -webkit-font-smoothing: antialiased;
+  background:
+    radial-gradient(900px 600px at 10% -10%, rgba(92, 96, 255, .16), transparent 60%),
+    radial-gradient(800px 500px at 90% 110%, rgba(255, 170, 80, .08), transparent 60%),
+    linear-gradient(180deg, #060918 0%, #0a1030 60%, #11173f 100%) fixed;
+  background-color: var(--bg);
+  min-height: 100vh;
+}
+h1, h2, h3 { font-family: var(--serif); font-weight: 650; letter-spacing: -.02em; }
+::selection { background: rgba(255, 196, 94, .35); }

@@ -6,6 +6,7 @@ Then open http://localhost:8000/docs to try every endpoint.
 """
 import asyncio
 import json
+import shutil
 import logging
 import re
 from contextlib import asynccontextmanager
@@ -29,12 +30,11 @@ log = logging.getLogger("lightsout")
 DEMO_NAME = "Demo Hall"
 
 
+MAX_BUILDINGS = 20  # buildings kept in memory at once
+
+
 def _slug(name: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-") or "building"
-
-
-class NeedGrid(Exception):
-    """Could not find the windows and the AI could not read the facade: ask for floors/cols."""
 
 
 def _cond_or_none(b: Optional[Building] = None):
@@ -55,69 +55,106 @@ def _cond(b: Optional[Building] = None):
     return cond
 
 
-def _analyze(name: str, photo: bytes, threshold: int, corners=None, floors=None, cols=None,
-             location: Optional[dict] = None) -> Building:
-    img = detection.load_image(photo)
-    lights = "detected"
+FACES = ("front", "right", "back", "left")
+
+
+def _detect_face(img, photo: bytes, seed: str, threshold: int, corners=None, floors=None, cols=None):
+    """Windows on one photo of one side -> (windows, method, lights)."""
     if corners:
-        windows = detection.detect_grid(img, corners, floors, cols)
-        method = "grid"
-    else:
-        day = facade.is_daylight(img)
-        windows = [] if day else detection.detect_windows(img, threshold)
-        method = "detect"
-        if len(windows) < 6:
-            # Day photo, or too few lit windows: read the facade with AI (or use the given grid).
-            info = None
-            try:
-                info = facade.read_facade(photo)
-            except Exception as exc:
-                log.warning("facade reading failed: %s", str(exc)[:200])
-            f = (info or {}).get("floors") or floors
-            c = (info or {}).get("cols") or cols
-            if not (f and c):
-                raise NeedGrid("Couldn't count the floors in this photo. Please enter floors and windows per floor.")
-            pts = None
-            if info and info.get("corners"):
-                h, w = img.shape[:2]
-                pts = [[x * w, y * h] for x, y in info["corners"]]
-            windows = facade.simulate_windows(img, f, c, pts, seed=name)
-            lights = "simulated"
-            method = "ai-facade" if info else "manual"
+        return detection.detect_grid(img, corners, floors, cols), "grid", "detected"
+    day = facade.is_daylight(img)
+    lights = "simulated" if day else "detected"  # a day photo shows no real night lights
+    if not day:
+        # Glass facades: windows from the frame grid; separate windows on a wall: bright blobs.
+        grid = detection.detect_facade_grid(img)
+        if len(grid) >= 12:
+            return grid, "detect-grid", lights
+    windows = [] if day else detection.detect_windows(img, threshold)
+    if len(windows) >= 6:
+        return windows, "detect", lights
+    # Day photo, or too few lit windows: read the facade with AI (or use a given grid).
+    info = None
+    try:
+        info = facade.read_facade(photo)
+    except Exception as exc:
+        log.warning("facade reading failed: %s", str(exc)[:200])
+    f = (info or {}).get("floors") or floors
+    c = (info or {}).get("cols") or cols
+    known = bool(f and c)
+    auto = [] if known else detection.detect_auto(img)
+    if auto:
+        return auto, "detect-auto", lights  # no AI: the brightest panes at the best brightness level
+    if not known:
+        gf, gc = facade.guess_grid(img)  # never ask the user for the grid
+        f, c = f or gf, c or gc
+    pts = None
+    if info and info.get("corners"):
+        h, w = img.shape[:2]
+        pts = [[x * w, y * h] for x, y in info["corners"]]
+    method = "ai-facade" if info and info.get("floors") and info.get("cols") else (
+        "manual" if floors and cols else "estimate")
+    return facade.simulate_windows(img, f, c, pts, seed=seed), method, "simulated"
+
+
+def _analyze(name: str, photo: bytes, threshold: int, corners=None, floors=None, cols=None,
+             location: Optional[dict] = None, sides: Optional[dict] = None) -> Building:
+    """Front photo plus optional photos of the other sides ({"right": bytes, "back": ..., "left": ...})."""
+    folder = config.OUTPUT_DIR / _slug(name)
+    folder.mkdir(parents=True, exist_ok=True)
+    base = f"/output/{_slug(name)}"
+    photos = {"front": photo} | {k: v for k, v in (sides or {}).items() if k in FACES and k != "front" and v}
+    windows, faces, method, lights, front_img = [], {}, "detect", "detected", None
+    for face in FACES:
+        if face not in photos:
+            continue
+        img = detection.load_image(photos[face])
+        is_front = face == "front"
+        found, m, li = _detect_face(img, photos[face], f"{name}:{face}", threshold,
+                                    corners if is_front else None, floors if is_front else None,
+                                    cols if is_front else None)
+        if not is_front and not found:
+            continue
+        if is_front:
+            front_img, method, lights = img, m, li
+        found = [w.model_copy(update={"face": face, "id": len(windows) + i})
+                 for i, w in enumerate(found, start=1)]
+        windows += found
+        stem = "photo" if is_front else face
+        (folder / f"{stem}.jpg").write_bytes(photos[face])
+        detection.save_debug_image(img, found, folder / f"{stem}_debug.jpg" if not is_front else folder / "debug.jpg")
+        faces[face] = {"photo_url": f"{base}/{stem}.jpg",
+                       "debug_url": f"{base}/{'debug' if is_front else stem + '_debug'}.jpg",
+                       "image_width": img.shape[1], "image_height": img.shape[0], "lights": li}
     if location:
         windows = risk.score_windows(windows, scenarios.current_conditions(location))
 
-    folder = config.OUTPUT_DIR / _slug(name)
-    folder.mkdir(parents=True, exist_ok=True)
-    (folder / "photo.jpg").write_bytes(photo)
-    detection.save_debug_image(img, windows, folder / "debug.jpg")
-    base = f"/output/{_slug(name)}"
-    b = Building(name=name, windows=windows, photo=photo, image_size=(img.shape[1], img.shape[0]),
-                 photo_url=f"{base}/photo.jpg", debug_url=f"{base}/debug.jpg", method=method,
-                 original=[w.model_copy() for w in windows], location=location, lights=lights)
+    b = Building(name=name, windows=windows, photo=photo, image_size=(front_img.shape[1], front_img.shape[0]),
+                 photo_url=faces["front"]["photo_url"], debug_url=faces["front"]["debug_url"], method=method,
+                 original=[w.model_copy() for w in windows], location=location, lights=lights, faces=faces)
+    # Keep only the most recent buildings (enough for a few people at once); the page never lists them.
+    state.buildings.pop(name, None)
     state.buildings[name] = b
+    while len(state.buildings) > MAX_BUILDINGS:
+        old = next(iter(state.buildings))
+        state.buildings.pop(old)
+        shutil.rmtree(config.OUTPUT_DIR / _slug(old), ignore_errors=True)
     state.current = name
+    state.last_decision = None
     return b
 
 
-def _load_saved_results() -> None:
-    """Load buildings saved by scripts/run_photos.py (Task 8) so the demo starts ready."""
-    for f in sorted(config.OUTPUT_DIR.glob("*/result.json")):
-        try:
-            data = json.loads(f.read_text())
-            photo = (f.parent / "photo.jpg").read_bytes()
-            _analyze(data["building"], photo, data.get("threshold", config.DETECT_THRESHOLD),
-                     data.get("corners"), data.get("floors"), data.get("cols"), data.get("location"))
-            log.info("loaded saved building %s", data["building"])
-        except Exception as exc:
-            log.warning("could not load %s: %s", f, exc)
+def _clear_old_uploads() -> None:
+    """Delete photos and results left from earlier runs; every server start begins fresh."""
+    for d in config.OUTPUT_DIR.iterdir():
+        if d.is_dir():
+            shutil.rmtree(d, ignore_errors=True)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await asyncio.to_thread(db.init)
+    await asyncio.to_thread(_clear_old_uploads)
     _analyze(DEMO_NAME, make_demo_photo(), threshold=150)
-    _load_saved_results()
     yield
 
 
@@ -179,8 +216,11 @@ async def analyze(photo: UploadFile = File(...), building: str = Form("Building"
                   address: Optional[str] = Form(None, description="Street address; its weather is used"),
                   threshold: int = Form(config.DETECT_THRESHOLD),
                   corners: Optional[str] = Form(None, description='Grid fallback: [[x,y] x4] TL,TR,BR,BL'),
-                  floors: Optional[int] = Form(None), cols: Optional[int] = Form(None)):
-    """Upload a building photo (night or day) and its address. Night photo: lit windows are detected.
+                  floors: Optional[int] = Form(None), cols: Optional[int] = Form(None),
+                  photo_right: Optional[UploadFile] = File(None, description="Optional photo of the right side"),
+                  photo_back: Optional[UploadFile] = File(None, description="Optional photo of the back"),
+                  photo_left: Optional[UploadFile] = File(None, description="Optional photo of the left side")):
+    """Upload a building photo (night or day) and its address. Photos of the other sides are optional. Night photo: lit windows are detected.
     Day photo: the AI counts floors and windows and a typical night is simulated.
     Pass corners + floors + cols to use the grid fallback instead of automatic detection."""
     data = await photo.read()
@@ -197,9 +237,9 @@ async def analyze(photo: UploadFile = File(...), building: str = Form("Building"
         if not floors or not cols:
             raise HTTPException(400, "Grid fallback needs floors and cols too")
     try:
-        b = await asyncio.to_thread(_analyze, building, data, threshold, pts, floors, cols, location)
-    except NeedGrid as exc:
-        raise HTTPException(422, str(exc))
+        sides = {face: await f.read() for face, f in
+                 (("right", photo_right), ("back", photo_back), ("left", photo_left)) if f is not None}
+        b = await asyncio.to_thread(_analyze, building, data, threshold, pts, floors, cols, location, sides)
     except ValueError as exc:
         raise HTTPException(400, f"{exc}. Please use a JPG or PNG photo.")
     await hub.broadcast({"type": "building"} | b.summary())
@@ -258,6 +298,7 @@ async def decide(req: DecideRequest):
         "reason": result["reason"], "source": result["source"], "conditions": cond.model_dump(),
         "windows": [w.model_dump() for w in b.windows],
         "energy_saved_kwh": result["energy_saved_kwh"], "money_saved_usd": result["money_saved_usd"],
+        "rule": result["rule"], "estimate": result["estimate"],
         "photo_url": b.photo_url, "after_url": b.after_url,
     }
     state.last_decision = payload

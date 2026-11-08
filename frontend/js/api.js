@@ -55,8 +55,8 @@
     buildings: () => request("GET", "/api/buildings"),
     lastDecision: () => request("GET", "/api/decision"),
     simulate: (scenario) => request("POST", "/api/simulate", { scenario }),
-    decide: () => request("POST", "/api/decide", {}),
-    reset: () => request("POST", "/api/reset", {}, true),
+    decide: (building) => request("POST", "/api/decide", { building }),
+    reset: (building) => request("POST", "/api/reset", building ? { building } : {}, true),
     select: (building) => request("POST", "/api/select", { building }, true),
   };
 

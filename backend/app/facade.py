@@ -86,3 +86,11 @@ def simulate_windows(img: np.ndarray, floors: int, cols: int, corners_px=None, s
         ))
     out.sort(key=lambda win: (win.floor, win.col))
     return [win.model_copy(update={"id": i}) for i, win in enumerate(out, start=1)]
+
+
+def guess_grid(img: np.ndarray) -> tuple[int, int]:
+    """Rough floors x windows-per-floor from the photo's shape, when nothing else worked."""
+    h, w = img.shape[:2]
+    floors = max(3, min(12, round(6 * h / w)))  # taller photo -> more floors
+    cols = max(3, min(14, round(7 * w / h)))     # wider photo -> more windows per floor
+    return floors, cols

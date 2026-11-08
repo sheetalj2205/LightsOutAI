@@ -14,17 +14,35 @@ RADIUS_KM, DAYS = 25, 3
 CACHE_SECONDS = 3600
 _cache: dict[tuple, tuple[float, dict]] = {}
 
-# Groups that mostly migrate at night (and hit lit buildings): matched on the common name.
-NIGHT_MIGRANTS = ("warbler", "thrush", "veery", "vireo", "sparrow", "tanager", "grosbeak", "bunting",
-                  "flycatcher", "pewee", "kinglet", "wren", "catbird", "oriole", "bobolink", "cuckoo",
-                  "rail", "sora", "sandpiper", "yellowlegs", "dowitcher", "plover", "woodcock", "snipe",
-                  "junco", "redstart", "ovenbird", "waterthrush", "yellowthroat", "chat", "creeper",
-                  "nuthatch", "brown thrasher", "towhee", "dickcissel", "nighthawk", "whip-poor-will")
+# Species that migrate at night through the Great Lakes / Northeast and are known building-collision
+# victims. Year-round residents with similar names (Carolina Wren, House Sparrow, Song Sparrow,
+# White-breasted Nuthatch, American Robin) are left out on purpose.
+# Every wood-warbler, vireo and flycatcher here migrates at night, so those are matched by family name.
+NIGHT_MIGRANT_FAMILIES = ("Warbler", "Vireo", "Flycatcher")
+NIGHT_MIGRANTS = frozenset({
+    # thrushes
+    "Hermit Thrush", "Swainson's Thrush", "Gray-cheeked Thrush", "Bicknell's Thrush", "Wood Thrush", "Veery",
+    # wood-warblers without "Warbler" in the name
+    "Ovenbird", "Northern Waterthrush", "Louisiana Waterthrush", "Common Yellowthroat", "American Redstart",
+    "Northern Parula", "Yellow-breasted Chat",
+    # sparrows and relatives that migrate (not the resident ones)
+    "White-throated Sparrow", "White-crowned Sparrow", "Fox Sparrow", "Lincoln's Sparrow", "Swamp Sparrow",
+    "Chipping Sparrow", "Field Sparrow", "Savannah Sparrow", "Vesper Sparrow", "Grasshopper Sparrow",
+    "American Tree Sparrow", "Dark-eyed Junco", "Eastern Towhee",
+    # wrens, kinglets, creepers, nuthatches that migrate
+    "Winter Wren", "House Wren", "Marsh Wren", "Sedge Wren", "Golden-crowned Kinglet", "Ruby-crowned Kinglet",
+    "Brown Creeper", "Red-breasted Nuthatch",
+    # others
+    "Gray Catbird", "Brown Thrasher", "Scarlet Tanager", "Rose-breasted Grosbeak", "Indigo Bunting",
+    "Baltimore Oriole", "Orchard Oriole", "Bobolink", "Eastern Wood-Pewee", "Eastern Phoebe",
+    "Yellow-billed Cuckoo", "Black-billed Cuckoo", "Yellow-bellied Sapsucker", "Sora", "Virginia Rail",
+    "American Woodcock", "Wilson's Snipe",
+})
 
 
 def _is_night_migrant(name: str) -> bool:
-    n = name.lower()
-    return any(k in n for k in NIGHT_MIGRANTS)
+    name = name.split(" (")[0]  # "Yellow-rumped Warbler (Myrtle)" -> "Yellow-rumped Warbler"
+    return name in NIGHT_MIGRANTS or name.endswith(NIGHT_MIGRANT_FAMILIES)
 
 
 def summarize(observations: list[dict]) -> dict:
