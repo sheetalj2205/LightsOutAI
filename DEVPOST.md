@@ -36,10 +36,42 @@ The AI chooses the windows; its answer is then checked against tonight's rule.
   windows. Street lamps and puddles are ignored. Day photos work too.
 - **Weather and birds:** National Weather Service, NOAA GFS (via Open-Meteo), eBird. Migration is estimated with
   BirdCast's forecast method.
-- **AI:** Gemini, with UB's BullsAI and a rule-based backup if it fails
+- **AI:** Gemini, with UB's BullsAI and a rule-based backup if it fails (details below)
 - **Frontend:** HTML, CSS, JavaScript, Three.js
-- **Extras:** ElevenLabs voice alert, Tiger Data logging, ESP32 LED board (simulated in Wokwi)
+- **Voice:** ElevenLabs (details below)
+- **Extras:** Tiger Data logging, ESP32 LED board (simulated in Wokwi)
 - **Hosting:** our laptop, shared through a Cloudflare Tunnel
+
+## How we used Gemini
+Gemini does two jobs:
+1. **Picks the windows.** We send the building photo, a list of every lit window (floor, brightness, color,
+   risk score) and tonight's weather and migration. Gemini replies in JSON: which windows to turn off or dim,
+   and a one-to-two sentence reason for building staff.
+2. **Reads day photos.** When a photo has no lit windows to detect, Gemini counts the floors and windows per
+   floor and finds the building's corners, so we can still build the window grid.
+
+To make it safe to trust:
+- **Checked against tonight's rule.** If Gemini turns off too few windows, the highest-risk ones are added.
+  Lobby floors and made-up window ids are removed.
+- **Same question, same answer.** Temperature 0, a fixed seed, and answers cached for 30 minutes.
+- **Never stuck.** 12-second timeout; if Gemini fails, UB's BullsAI gets the same prompt, then a rule-based
+  backup.
+
+## How we used ElevenLabs
+We used ElevenLabs in two places: inside the app, and to make our demo video.
+
+**In the app: a spoken alert**
+- When the AI decides, ElevenLabs reads its reason out loud: tonight's weather and migration, how many
+  windows went off, and on which floors.
+- It's for a security guard or building manager who isn't looking at a screen.
+- Calm voice (Rachel, `eleven_multilingual_v2`), capped at 400 characters.
+
+**For our demo video**
+- **Narration:** the whole voice-over is ElevenLabs (voice: Roger, Eleven v3).
+- **Animated scenes:** the bird's journey, the foggy city and the ending were made as images, then turned
+  into short clips with image-to-video.
+- **Editing:** we put the screen recordings, animations and narration together and trimmed them in
+  ElevenLabs.
 
 ## Challenges
 - **Glass buildings:** our first detector put windows on trees and puddles. We switched to finding window frames.
