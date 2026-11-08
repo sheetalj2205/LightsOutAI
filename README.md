@@ -1,25 +1,28 @@
 # Lights Out AI
 
-Turns off the building lights that kill migrating birds. It finds every lit window in a real night photo of a
-UB building, scores each window's bird-collision risk from tonight's Buffalo weather, lets Gemini choose which
-windows to turn off, and switches them on a live digital twin of the building.
+Turns off the building lights that kill migrating birds. Upload a photo of any building and type its address.
+It finds every lit window, checks tonight's weather, bird migration and nearby eBird sightings, lets AI choose
+which windows to turn off (checked against published Lights Out rules), and switches them off on a 3D model of
+the building and a small ESP32 LED building.
 
 ```
-night photo ─► window detection (OpenCV) ─► risk per window ◄─ weather + migration (NWS)
-                                                   │
-                                     Gemini decision (+ safe fallback)
-                                                   │
-                     WebSocket ─► digital twin ─► "ok" ─► Tiger Data log
-                                                   │
-                           dashboard · before/after · ElevenLabs voice alert
+photo + address ─► window detection (OpenCV) ─► risk per window ◄─ weather (NWS, NOAA GFS) + eBird
+                                                       │          + migration (BirdCast method)
+                                  Gemini decision (backups: BullsAI, then rules)
+                                                       │
+                                     checked against tonight's Lights Out rule
+                                                       │
+                  WebSocket ─► 3D model + ESP32 LED building ─► "ok" ─► Tiger Data log
+                                                       │
+                     impact (collisions, energy, money) · before/after · ElevenLabs voice alert
 ```
 
 | Folder | Owner | What |
 |--------|-------|------|
 | [backend/](backend/) | Sheetal | FastAPI server, detection, risk, Gemini, WebSocket, Tiger Data |
-| [frontend/](frontend/) | Sakshi | Twin building page, dashboard, voice alert |
-| [photos/](photos/) | Sakshi | Night photos of UB buildings |
-| [deploy/](deploy/) | Sheetal | Vultr setup |
+| [frontend/](frontend/) | Sakshi | Upload page, 3D building, dashboard, before/after, voice alert |
+| [photos/](photos/) | Sakshi | Sample building photos |
+| [deploy/](deploy/) | Sheetal | Vultr setup (planned; we ran on a laptop + Cloudflare Tunnel) |
 | [hardware/wokwi/](hardware/wokwi/) | Sheetal | Simulated ESP32 + LED "mini building" ([guide](hardware/README.md)) |
 
 - **Setup, keys and deploy, step by step:** [SETUP.md](SETUP.md)

@@ -1,7 +1,5 @@
 # Lights Out AI
 
-> Fill in the [brackets] before submitting.
-
 ## Inspiration
 Up to 1 billion birds die hitting U.S. buildings every year. They migrate at night, and lit windows pull them
 off course. "Lights Out" programs ask buildings to turn lights off, but someone has to remember every night.
@@ -16,12 +14,12 @@ We asked: why not do the same for **buildings**, window by window? Because:
   birds while keeping the rooms people use lit.
 
 ## What it does
-1. Upload a photo of a building (and other sides, if you like) and type its address.
-2. The app finds every lit window in the photo.
-3. It checks tonight's weather, bird migration and nearby eBird sightings for that address.
-4. AI picks which lights to turn off, highest-risk first, and explains why. Lobby lights stay on.
-5. The lights go off on a 3D model of the building made from your photo, and on a small LED building (ESP32).
-6. It shows the impact: fewer bird collisions (estimate), energy and money saved, before/after photos.
+- Upload a photo of a building (and other sides, if you like) and type its address.
+- The app finds every lit window in the photo.
+- It checks tonight's weather, bird migration and nearby eBird sightings for that address.
+- AI picks which lights to turn off, highest-risk first, and explains why. Lobby lights stay on.
+- The lights go off on a 3D model of the building made from your photo, and on a small LED building (ESP32).
+- It shows the impact: fewer bird collisions (estimate), energy and money saved, before/after photos.
 
 ## How many lights go off
 We follow published rules, not our own guesses:
