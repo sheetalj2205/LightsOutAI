@@ -81,9 +81,21 @@ We used ElevenLabs in two places: inside the app, and to make our demo video.
 - **No cloud server:** a credits issue kept us off Vultr (see below).
 
 ## What we're proud of
-- Photo to lights off in about [N] seconds.
-- [Building name]: 133 windows found; on a medium night, 57 turned off, an estimated 83%+ fewer collisions.
-- Every number on screen links to its source.
+- **One photo, under a minute.** In our demo, going from uploading a photo to lights off took under a minute,
+  including typing the address. On that building the app found 24 windows (16 lit), turned off the 12
+  riskiest, and estimated 83%+ fewer collisions, plus 5.8 kWh and $0.98 saved in one night.
+- **It works on real photos.** Lights can be on or off in any mix, and the app only scores the windows that are
+  lit. Day photos work too: it simulates tonight's lights. Glass buildings like Davis Hall work after we
+  switched to finding window frames instead of bright spots.
+- **No made-up numbers.** How many lights go off comes from published Lights Out rules and a 21-year study, not
+  from us. The AI picks the windows, and we check its answer against tonight's rule. Every number on screen
+  links to its source.
+- **It never leaves a building without an answer.** When Gemini and BullsAI weren't available during our
+  hardware run, the rule-based backup decided instead and the demo kept going.
+- **More than a web page.** The app sends the building to an ESP32 LED model over a live connection, and an
+  ElevenLabs voice alert tells building staff what changed and why.
+- **Honest about limits.** We label what's real (photos, forecast, eBird), what's estimated (migration, the
+  collision drop, energy), and what's simulated (the LED board).
 
 ## Real vs estimated
 - **Real:** the photos, the weather forecast, eBird sightings.

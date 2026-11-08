@@ -102,24 +102,28 @@ Scene 7 (Voice A):
 
 ---
 
-## Explainer narration (after the results, before the ending)
+## Final narration (as used in LightsOutAI-Video-FINAL.mp4, voice: Roger, Eleven v3)
 
-Generate each as its own file (voice: Roger, model: Eleven v3). Keep each under the time shown.
+The demo lines match the recorded building (24 windows, 16 lit, medium migration, 12 turned off).
 
-A, "How much goes dark?" (max 13 sec):
-```
-How does it decide? Migration sets how much goes dark. Heavy nights: every non-essential light. Medium nights: at least half, which a twenty-one-year study tied to six to eleven times fewer collisions.
-```
-
-B, "Which windows first?" (max 10.5 sec):
-```
-Then every window gets a risk score: higher, brighter, whiter light, plus fog. The riskiest go off first, the next are dimmed, and the lobby stays on.
-```
-
-C, "Today, and with Cornell's data" (max 9 sec):
-```
-Today, we estimate migration from the weather. With Cornell's BirdCast radar data, it would know how many birds are really flying, every night.
-```
+| Time | On screen | Line |
+|------|-----------|------|
+| 0:31 | Home page | So, we built Lights Out AI. It decides which windows go dark, one by one. |
+| 0:37 | Photo upload | Upload a photo of any building, with its lights on or off. |
+| 0:41 | Analysis + 3D model | It finds sixteen lit windows, and builds the building in 3D. |
+| 0:47 | Address | Then add its address. |
+| 0:49 | Weather, migration, eBird | It checks tonight's weather and migration. Medium tonight, with fourteen species seen nearby. |
+| 0:57 | Lights off, 83%+ | One click, and AI turns off the twelve riskiest windows. Over eighty percent fewer collisions. |
+| — | *Hardware section, only in LightsOutAI-Video-with-Hardware.mp4 (1:05–1:52):* | |
+| 1:05 | ESP32 boots, connects, LEDs light up | We built the hardware side too: an ESP32 driving a small LED building, simulated in Wokwi. It connects to Lights Out AI, and each LED lights up like a window in the photo. |
+| 1:18 | Davis Hall photo, 3D model | Here it is live on Davis Hall in Buffalo. The app reads the photo and builds it in 3D. |
+| 1:25 | Buffalo weather | Tonight in Buffalo: rain and low clouds, but low migration. |
+| 1:30 | Click → result | One click. On a low-migration night, nothing has to go off, so the AI just dims ten of the riskiest windows. |
+| 1:40 | Voice alert | And it tells building staff, out loud. *(then the app's own ElevenLabs alert plays)* |
+| 1:05 | How much goes dark? | So how does it decide? Migration sets how much goes dark. Every non-essential light on heavy nights. At least half on medium nights, which a twenty-one-year study tied to six to eleven times fewer collisions. |
+| 1:21 | Which windows first? | Only the windows lit in your photo are scored. Higher, brighter and whiter light scores higher, and fog raises them all. The riskiest go off first, the next are dimmed, and the lobby stays on. |
+| 1:36 | Today vs. Cornell data | Today, we estimate migration from the weather. With Cornell's BirdCast radar data, we'd know how many birds are really flying. |
+| 1:45 | Ending | Lights Out shouldn't depend on someone remembering. Now... it doesn't have to. |
 
 ---
 
