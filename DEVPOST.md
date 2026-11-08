@@ -3,116 +3,77 @@
 > Fill in the [brackets] before submitting.
 
 ## Inspiration
-Up to 1 billion birds die hitting buildings in the U.S. every year. Most migrate at night, and lit windows pull
-them off course, worst of all on foggy, cloudy nights. Buffalo sits on a major migration route. "Lights Out"
-programs ask buildings to turn lights off during migration, but someone has to remember, every night, for every
-window. We built a tool that decides for you.
+Up to 1 billion birds die hitting U.S. buildings every year. They migrate at night, and lit windows pull them
+off course. "Lights Out" programs ask buildings to turn lights off, but someone has to remember every night.
+
+Then we saw [Photometrics AI's work with the Cornell Lab](https://www.birds.cornell.edu/home/photometrics-ai-uses-bird-data-to-adjust-streetlights/):
+their platform uses Cornell's BirdCast forecasts to dim **streetlights** automatically on big migration nights.
+We asked: why not do the same for **buildings**, window by window? Because:
+- **Birds die at buildings.** Streetlights draw them into the city, but the deaths happen at lit windows. The
+  more lit window area, the more collisions (Van Doren et al. 2021).
+- **Buildings have no automatic system.** Lights Out still depends on someone remembering, on the right nights.
+- **Not every light can go off.** People study and work inside at night. Choosing the riskiest windows protects
+  birds while keeping the rooms people use lit.
 
 ## What it does
-You upload a photo of a building and type its address. The app:
+1. Upload a photo of a building (and other sides, if you like) and type its address.
+2. The app finds every lit window in the photo.
+3. It checks tonight's weather, bird migration and nearby eBird sightings for that address.
+4. AI picks which lights to turn off, highest-risk first, and explains why. Lobby lights stay on.
+5. The lights go off on a 3D model of the building made from your photo, and on a small LED building (ESP32).
+6. It shows the impact: fewer bird collisions (estimate), energy and money saved, before/after photos.
 
-1. **Finds every window** in the photo, and which ones are lit. You can add photos of the other sides too.
-2. **Reads tonight's sky**: the weather forecast for that address, an estimate of how many birds are migrating
-   tonight, and recent eBird sightings of night-migrating birds nearby.
-3. **Picks a rule for tonight**, taken from published guidance (see below).
-4. **Lets AI choose the windows**: Gemini picks which lights to turn off or dim, highest-risk first (high
-   floors, bright white light), and explains why in plain English. Lobby and safety lights always stay on.
-5. **Turns them off**: the lights go out top floor first on a 3D model of the building made from your photo,
-   and on a small LED "building" (ESP32). A voice alert tells staff what was done.
-6. **Shows the impact**: estimated drop in bird collisions, share of lit window area turned off, energy and
-   money saved, and a before/after view of the real photo.
+## How many lights go off
+We follow published rules, not our own guesses:
+- **Heavy migration:** turn off all non-essential lights (Audubon, BirdCast, NY DEC guidance).
+- **Medium migration:** turn off at least half of the lit window area (Van Doren et al. 2021, *PNAS*: this cut
+  collisions 6× in fall and 11× in spring).
+- **Light migration:** no target.
 
-## Tonight's rule (from published sources, not our guesses)
-| Migration tonight | Rule | Source |
-|---|---|---|
-| High | Turn off every non-essential lit window | Lights Out guidance (Audubon, BirdCast, NY DEC) |
-| Medium | Turn off at least half of the lit window area | Van Doren et al. 2021, *PNAS* |
-| Low | No target; dimming the brightest windows is optional | Low risk |
-
-Van Doren et al. studied 21 years of bird collisions at one Chicago building: halving the lit window area cut
-collisions **6× in fall and 11× in spring**. We use that result to estimate the impact for your building.
+The AI chooses the windows; its answer is then checked against tonight's rule.
 
 ## How we built it
-- **Backend:** Python, FastAPI, WebSockets.
-- **Finding windows (OpenCV):**
-  - Glass buildings: find the big lit areas, then split them along the dark window frames into panes.
-  - Separate windows on a wall: bright-blob detection.
-  - Day photos: Gemini counts floors and windows, then we simulate tonight's lights.
-  - Lamps, puddles and glare are filtered out. The app never asks the user to count floors.
-- **Weather and migration:** National Weather Service forecast (U.S. addresses); a migration estimate built
-  with the factors of the BirdCast forecast model (season, tailwind, temperature and pressure change, rain) on
-  NOAA's GFS weather model via Open-Meteo; live eBird sightings, counting only species that really migrate at night.
-- **AI:** Gemini (photo + window list + tonight's rule) returns JSON. If Gemini is down, UB's BullsAI takes
-  over, then a rule-based safety net. If the AI's choice doesn't meet tonight's rule, the highest-risk windows
-  are added until it does.
-- **Frontend:** HTML, CSS, JavaScript, Three.js (3D scene with the real photo on the building).
-- **Voice:** ElevenLabs. **Data:** every decision is logged to Tiger Data (TimescaleDB).
-- **Hardware:** an ESP32 with a 5×6 LED grid, simulated in Wokwi, joins the same WebSocket and switches its
-  LEDs with the building.
-- **Hosting:** the server runs on our laptop and is shared through a Cloudflare Tunnel (a free public HTTPS
-  link to it). We planned to use Vultr but couldn't, because of a credits issue.
+- **Backend:** Python, FastAPI, WebSockets
+- **Window detection:** OpenCV. On glass buildings it finds the window frames; on other buildings, the bright
+  windows. Street lamps and puddles are ignored. Day photos work too.
+- **Weather and birds:** National Weather Service, NOAA GFS (via Open-Meteo), eBird. Migration is estimated with
+  BirdCast's forecast method.
+- **AI:** Gemini, with UB's BullsAI and a rule-based backup if it fails
+- **Frontend:** HTML, CSS, JavaScript, Three.js
+- **Extras:** ElevenLabs voice alert, Tiger Data logging, ESP32 LED board (simulated in Wokwi)
+- **Hosting:** our laptop, shared through a Cloudflare Tunnel
 
-## Challenges we ran into
-- **Glass buildings.** Bright-blob detection failed on glass walls: boxes on trees, puddles and street lamps.
-  We switched to finding the window frames, which follows the real grid of panes.
-- **Made-up numbers.** Our first version used our own percentages for how many lights to turn off. We replaced
-  them with rules from published research and official guidance, so every number can be checked.
-- **The AI being too timid.** With a vague prompt, the AI turned off only 4 windows. Now it gets tonight's rule,
-  and the result is checked against it.
-- **Reliability.** The Gemini quota ran out during the hackathon. Every step has a fallback, so the demo keeps
-  working.
-- **No cloud server.** A credits issue kept us off Vultr, so we ran everything on a laptop behind a Cloudflare
-  Tunnel. It works, but the public link changes every time the tunnel restarts, and the laptop has to stay on.
+## Challenges
+- **Glass buildings:** our first detector put windows on trees and puddles. We switched to finding window frames.
+- **Made-up numbers:** we replaced our own percentages with published rules.
+- **AI too cautious:** it turned off only 4 windows. Now its answer is checked against tonight's rule.
+- **Gemini quota ran out:** backups kept the app working.
+- **No cloud server:** a credits issue kept us off Vultr (see below).
 
-## Accomplishments we're proud of
-- From a phone photo to lights switching off, in about [N] seconds.
-- A glass campus building: 133 panes found; on a medium-migration night the AI turned off 57 of them (half the
-  lit window area), an estimated **≥83% fewer bird collisions**.
+## What we're proud of
+- Photo to lights off in about [N] seconds.
+- [Building name]: 133 windows found; on a medium night, 57 turned off, an estimated 83%+ fewer collisions.
 - Every number on screen links to its source.
 
-## What we learned
-- Real night photos are messy; a method that works on one building can fail on the next.
-- AI decisions need clear rules and a check afterwards, not just a good prompt.
-- Being honest about what is measured and what is estimated makes the project stronger.
+## Real vs estimated
+- **Real:** the photos, the weather forecast, eBird sightings.
+- **Estimated:** tonight's migration (from weather, not radar), the collision drop (from one Chicago study),
+  energy saved (about 60 W per window).
+- **Simulated:** lights switch on a 3D model and LED board, not real building controls.
 
-## What is real and what is estimated
-- **Real:** the building photos; tonight's weather forecast; eBird sightings.
-- **From published research:** tonight's rule and the collision estimate (Van Doren et al. 2021; Lights Out
-  guidance).
-- **Estimated:** tonight's migration level (weather-based, BirdCast's method, not radar; we link to BirdCast's
-  radar for comparison). The collision estimate applies one Chicago building's result to other buildings; when
-  more than half the lit area goes dark we only claim "at least" the measured result. Energy uses about 60 W per
-  window for 8 hours at $0.17/kWh.
-- **Our own model:** the per-window risk score (height, brightness, light color). It only decides which
-  windows go first, not how many.
-- **Simulated:** lights switch on a 3D model and an LED board, not real building controls. The same commands
-  could drive a building management system or smart switches.
-
-## What would turn our estimates into real data
-| Estimate | Why it's estimated | What would make it real |
-|---|---|---|
-| Tonight's migration | BirdCast has no free public API, so we use their method on weather data | BirdCast (Cornell) data access: radar-measured birds in the air tonight |
-| Collision drop | No one counts collisions at this building; we use one Chicago study | Collision counts at the building (volunteers, dBird, Global Bird Rescue) |
-| Energy saved | We assume ~60 W per window | The building's meter or real fixture wattage |
-| Window risk score | No per-window collision data; our own weights | Collision counts per facade to tune the weights |
-
-## What Vultr would have given us
-- **A fixed address.** Our tunnel link changes on every restart, so we had to update the LED board's settings
-  and every shared link. A Vultr server with our own domain keeps one address.
-- **Always on.** The app stops when the laptop sleeps. A server runs 24/7, which matters for a tool that acts
-  every night.
-- **Nightly automation.** A server could check migration at sunset and alert building managers by itself,
-  without anyone opening the app.
-- **More users at once.** A real server handles judges, building staff and LED boards together better than a
-  laptop on campus Wi-Fi.
+## What we could have done with Vultr
+We planned to run on Vultr but couldn't because of a credits issue. With it we would have had:
+- **A fixed address:** our tunnel link changes on every restart, so the LED board and shared links break.
+- **Always on:** today the app stops when the laptop sleeps. A tool for every night needs a 24/7 server.
+- **Nightly alerts:** a server could check migration at sunset and alert building managers by itself.
+- **Many buildings at once:** one server for a whole campus, with judges, staff and LED boards connected together.
 
 ## What's next
-- Move to a cloud server (Vultr) with our own domain.
-- Use BirdCast radar data instead of our weather-based estimate.
-- Connect to real building controls (BACnet) or smart plugs.
-- Send building managers an automatic alert at sunset on high-risk nights.
-- A campus map with every building's risk tonight.
+- **BirdCast (Cornell) data access:** real radar counts of birds tonight instead of our estimate.
+- **Collision counts at the building:** to check our impact estimate.
+- **Real building controls or smart plugs:** to switch actual lights.
+- **A campus map:** every building's risk tonight, in one place.
 
 ## Built with
-python, fastapi, opencv, numpy, gemini, bullsai, websockets, javascript, three.js, html, css, elevenlabs,
-tiger-data, timescaledb, national-weather-service, open-meteo, ebird, esp32, wokwi, cloudflare-tunnel
+python, fastapi, opencv, gemini, bullsai, javascript, three.js, elevenlabs, tiger-data, open-meteo, ebird,
+esp32, wokwi, cloudflare-tunnel
