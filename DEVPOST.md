@@ -49,7 +49,8 @@ collisions **6× in fall and 11× in spring**. We use that result to estimate th
 - **Voice:** ElevenLabs. **Data:** every decision is logged to Tiger Data (TimescaleDB).
 - **Hardware:** an ESP32 with a 5×6 LED grid, simulated in Wokwi, joins the same WebSocket and switches its
   LEDs with the building.
-- **Hosting:** [Vultr + Caddy / domain].
+- **Hosting:** the server runs on our laptop and is shared through a Cloudflare Tunnel (a free public HTTPS
+  link to it). We planned to use Vultr but couldn't, because of a credits issue.
 
 ## Challenges we ran into
 - **Glass buildings.** Bright-blob detection failed on glass walls: boxes on trees, puddles and street lamps.
@@ -60,6 +61,8 @@ collisions **6× in fall and 11× in spring**. We use that result to estimate th
   and the result is checked against it.
 - **Reliability.** The Gemini quota ran out during the hackathon. Every step has a fallback, so the demo keeps
   working.
+- **No cloud server.** A credits issue kept us off Vultr, so we ran everything on a laptop behind a Cloudflare
+  Tunnel. It works, but the public link changes every time the tunnel restarts, and the laptop has to stay on.
 
 ## Accomplishments we're proud of
 - From a phone photo to lights switching off, in about [N] seconds.
@@ -85,7 +88,18 @@ collisions **6× in fall and 11× in spring**. We use that result to estimate th
 - **Simulated:** lights switch on a 3D model and an LED board, not real building controls. The same commands
   could drive a building management system or smart switches.
 
+## What Vultr would have given us
+- **A fixed address.** Our tunnel link changes on every restart, so we had to update the LED board's settings
+  and every shared link. A Vultr server with our own domain keeps one address.
+- **Always on.** The app stops when the laptop sleeps. A server runs 24/7, which matters for a tool that acts
+  every night.
+- **Nightly automation.** A server could check migration at sunset and alert building managers by itself,
+  without anyone opening the app.
+- **More users at once.** A real server handles judges, building staff and LED boards together better than a
+  laptop on campus Wi-Fi.
+
 ## What's next
+- Move to a cloud server (Vultr) with our own domain.
 - Use BirdCast radar data instead of our weather-based estimate.
 - Connect to real building controls (BACnet) or smart plugs.
 - Send building managers an automatic alert at sunset on high-risk nights.
@@ -93,4 +107,4 @@ collisions **6× in fall and 11× in spring**. We use that result to estimate th
 
 ## Built with
 python, fastapi, opencv, numpy, gemini, bullsai, websockets, javascript, three.js, html, css, elevenlabs,
-tiger-data, timescaledb, national-weather-service, open-meteo, ebird, esp32, wokwi, [vultr, caddy]
+tiger-data, timescaledb, national-weather-service, open-meteo, ebird, esp32, wokwi, cloudflare-tunnel
